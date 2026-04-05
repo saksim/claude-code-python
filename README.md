@@ -777,6 +777,76 @@ pytest tests/ -v
 python -m pytest --collect-only
 ```
 
+## 等价审计 (Parity Audit)
+
+Claude Code Python 集成了 parity 审计功能，可以与 TypeScript 原版进行对比：
+
+```python
+from claude_code.porting import run_parity_audit, PORTED_TOOLS, PORTED_COMMANDS
+
+# 运行等价审计
+result = run_parity_audit()
+print(result.to_markdown())
+```
+
+### 输出示例
+
+```
+## Tools
+- Reference (TS): **184**
+- Implemented (Python): **53**
+- Coverage: **28.8%**
+
+## Commands
+- Reference (TS): **207**
+- Implemented (Python): **5**
+- Coverage: **2.4%**
+```
+
+### 快照查询
+
+```python
+from claude_code.porting import find_tools, find_commands, get_tool_snapshot
+
+# 搜索工具
+results = find_tools("bash", limit=10)
+
+# 获取特定工具
+tool = get_tool_snapshot("AgentTool")
+print(tool.name, tool.source_hint)
+```
+
+## 会话持久化
+
+保存和恢复会话：
+
+```python
+from claude_code.porting import StoredSession, save_session, load_session, list_sessions
+from datetime import datetime
+import uuid
+
+# 创建并保存会话
+session = StoredSession(
+    session_id=uuid.uuid4().hex,
+    messages=("Hello", "Hi there!"),
+    input_tokens=100,
+    output_tokens=50,
+    created_at=datetime.now().isoformat(),
+)
+save_session(session)
+
+# 列出所有会话
+sessions = list_sessions()
+
+# 加载会话
+loaded = load_session(session_id)
+```
+
+### 会话存储位置
+
+- 默认: `~/.claude/sessions/`
+- 可自定义: `save_session(session, custom_directory)`
+
 ## 📄 许可证
 
 本项目采用 **[MIT 许可证](LICENSE)** —— 一个简短、宽松、商业友好的开源协议。  
