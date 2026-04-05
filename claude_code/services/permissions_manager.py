@@ -48,7 +48,7 @@ class PermissionResult(Enum):
     ASK = "ask"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PermissionRule:
     """A permission rule for tool access control.
     

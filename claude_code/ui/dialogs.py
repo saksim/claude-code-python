@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DialogLauncher:
     """A dialog launcher for launching various views.
     

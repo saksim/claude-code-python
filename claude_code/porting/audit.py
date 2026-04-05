@@ -22,7 +22,7 @@ from claude_code.porting.snapshots import (
 OUR_ROOT = Path(__file__).resolve().parent.parent
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ParityAuditResult:
     """Result of a parity audit between Python and TypeScript.
     

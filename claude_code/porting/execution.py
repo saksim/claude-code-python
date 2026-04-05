@@ -17,7 +17,7 @@ from claude_code.porting.snapshots import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MirroredCommand:
     """A mirrored command from the porting workspace.
     
@@ -44,7 +44,7 @@ class MirroredCommand:
         return f"Mirrored command '{self.name}' from {self.source_hint} would handle prompt {prompt!r}."
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MirroredTool:
     """A mirrored tool from the porting workspace.
     

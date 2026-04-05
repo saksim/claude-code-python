@@ -12,7 +12,7 @@ import sys
 import platform
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BootstrapGraph:
     """Bootstrap graph showing the startup flow.
     

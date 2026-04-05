@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PrefetchResult:
     """Result of a prefetch operation.
     
@@ -27,7 +27,7 @@ class PrefetchResult:
     detail: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DeferredInitResult:
     """Result of deferred initialization.
     
@@ -55,7 +55,7 @@ class DeferredInitResult:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WorkspaceSetup:
     """Workspace setup information.
     

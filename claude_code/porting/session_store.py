@@ -16,7 +16,7 @@ from typing import Optional
 DEFAULT_SESSION_DIR = Path.home() / ".claude" / "sessions"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StoredSession:
     """A persisted session.
     

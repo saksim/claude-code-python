@@ -16,7 +16,7 @@ from claude_code.porting.snapshots import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CommandGraph:
     """Command graph showing command categories.
     

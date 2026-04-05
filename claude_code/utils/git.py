@@ -30,7 +30,7 @@ class GitStatus(Enum):
     UNTRACKED = "untracked"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GitInfo:
     """Git repository information.
     

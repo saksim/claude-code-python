@@ -19,7 +19,7 @@ SNAPSHOT_TOOLS_PATH = _PARITY_ROOT / "src" / "reference_data" / "tools_snapshot.
 SNAPSHOT_COMMANDS_PATH = _PARITY_ROOT / "src" / "reference_data" / "commands_snapshot.json"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PortingModule:
     """A module from the porting workspace.
     

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DirectModeReport:
     """Report for a direct mode operation.
     
@@ -129,7 +129,7 @@ class DirectModes:
         return mode in DirectModes.get_available_modes()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RuntimeModeReport:
     """Detailed report for runtime mode operations.
     
