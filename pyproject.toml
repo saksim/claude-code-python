@@ -1,0 +1,39 @@
+{
+    "name": "claude-code-python",
+    "version": "1.0.0",
+    "description": "AI Programming Assistant CLI - Python implementation",
+    "requires-python": ">=3.10",
+    "dependencies": {
+        "anthropic": ">=0.40.0",
+        "httpx": ">=0.28.0",
+        "rich": ">=13.9.0",
+        "readline": "*",
+        "click": ">=8.1.0",
+        "pydantic": ">=2.9.0",
+        "python-dotenv": ">=1.0.0",
+        "rich": ">=13.0.0",
+        "tenacity": ">=8.3.0",
+        "aiofiles": ">=24.0.0",
+        "pathspec": ">=2.6.0",
+        "watchdog": ">=4.0.0",
+        "pyyaml": ">=6.0.0",
+        "keyring": ">=25.0.0"
+    },
+    "dev_dependencies": {
+        "pytest": ">=8.0.0",
+        "pytest-asyncio": ">=0.24.0",
+        "ruff": ">=0.6.0",
+        "mypy": ">=1.13.0"
+    },
+    "scripts": {
+        "dev": "python -m claude_code.main",
+        "test": "pytest",
+        "lint": "ruff check .",
+        "format": "ruff format ."
+    },
+    "entry_points": {
+        "console_scripts": [
+            "claude=claude_code.main:main"
+        ]
+    }
+}

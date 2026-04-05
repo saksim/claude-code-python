@@ -1,0 +1,24 @@
+# Core dependencies
+anthropic>=0.40.0
+httpx>=0.28.0
+rich>=13.9.0
+click>=8.1.0
+pydantic>=2.9.0
+python-dotenv>=1.0.0
+tenacity>=8.3.0
+aiofiles>=24.0.0
+pathspec>=2.6.0
+watchdog>=4.0.0
+pyyaml>=6.0.0
+keyring>=25.0.0
+
+# Provider-specific dependencies (optional)
+boto3>=1.35.0  # AWS Bedrock
+google-auth>=2.35.0  # Google Vertex
+openai>=1.50.0  # Azure OpenAI
+
+# Development dependencies
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+ruff>=0.6.0
+mypy>=1.13.0
