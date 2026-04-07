@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import traceback
 from dataclasses import dataclass, field
 from typing import Any
@@ -73,6 +74,59 @@ class ToolError(ClaudeCodeError):
     ) -> None:
         super().__init__(message, code)
         self.tool_name = tool_name
+
+
+class ToolNotFoundError(ToolError):
+    """Tool not found in registry."""
+    
+    def __init__(self, tool_name: str) -> None:
+        super().__init__(
+            message=f"Tool '{tool_name}' not found",
+            tool_name=tool_name,
+            code="TOOL_NOT_FOUND"
+        )
+
+
+class ToolExecutionError(ToolError):
+    """Tool execution failed."""
+    
+    def __init__(self, message: str, tool_name: str = "", cause: Exception | None = None) -> None:
+        super().__init__(message, tool_name, "TOOL_EXECUTION_ERROR")
+        self.cause = cause
+
+
+class ToolTimeoutError(ToolError):
+    """Tool execution timed out."""
+    
+    def __init__(self, tool_name: str, timeout_seconds: int) -> None:
+        super().__init__(
+            message=f"Tool '{tool_name}' timed out after {timeout_seconds}s",
+            tool_name=tool_name,
+            code="TOOL_TIMEOUT"
+        )
+
+
+class ToolValidationError(ToolError):
+    """Tool input validation failed."""
+    
+    def __init__(self, message: str, tool_name: str = "", field: str = "") -> None:
+        super().__init__(message, tool_name, "TOOL_VALIDATION_ERROR")
+        self.field = field
+
+
+class ToolPermissionError(ToolError):
+    """Tool permission denied."""
+    
+    def __init__(self, message: str, tool_name: str = "") -> None:
+        super().__init__(message, tool_name, "TOOL_PERMISSION_DENIED")
+
+
+class ToolResultError(ToolError):
+    """Tool returned an error result."""
+    
+    def __init__(self, message: str, tool_name: str = "", is_error: bool = True) -> None:
+        super().__init__(message, tool_name, "TOOL_RESULT_ERROR")
+        self.is_error = is_error
 
 
 class SessionError(ClaudeCodeError):
@@ -157,3 +211,120 @@ def format_error(error: Exception, include_traceback: bool = False) -> str:
         return f"{message}\n\nTraceback:\n{''.join(tb)}"
 
     return message
+
+
+class ToolErrorHandler:
+    """统一的工具错误处理器.
+    
+    提供统一的错误处理和日志记录.
+    
+    Example:
+        >>> handler = ToolErrorHandler()
+        >>> result = handler.handle(error, context)
+    """
+    
+    def __init__(self) -> None:
+        """Initialize error handler."""
+        self._logger = logging.getLogger(__name__)
+    
+    def handle(
+        self,
+        error: Exception,
+        tool_name: str = "",
+        context: dict[str, Any] | None = None,
+    ) -> "ToolResult":
+        """Handle tool error and return error result.
+        
+        Args:
+            error: The exception to handle
+            tool_name: Name of the tool that threw the error
+            context: Additional context information
+            
+        Returns:
+            ToolResult with error information
+        """
+        from claude_code.tools.base import ToolResult
+        
+        # Log error
+        self._log_error(error, tool_name, context)
+        
+        # Map to appropriate error type
+        if isinstance(error, ToolError):
+            return ToolResult(
+                content=error.message,
+                is_error=True,
+                error_code=error.code,
+            )
+        
+        # Generic error handling
+        error_type = type(error).__name__
+        return ToolResult(
+            content=str(error),
+            is_error=True,
+            error_code=error_type,
+        )
+    
+    def _log_error(
+        self,
+        error: Exception,
+        tool_name: str,
+        context: dict[str, Any] | None,
+    ) -> None:
+        """Log error with appropriate level."""
+        if isinstance(error, ToolTimeoutError):
+            self._logger.warning(
+                f"Tool timeout: {tool_name}",
+                extra={"error": str(error), "context": context}
+            )
+        elif isinstance(error, ToolPermissionError):
+            self._logger.warning(
+                f"Tool permission denied: {tool_name}",
+                extra={"error": str(error), "context": context}
+            )
+        elif isinstance(error, ToolValidationError):
+            self._logger.info(
+                f"Tool validation error: {tool_name}",
+                extra={"error": str(error), "context": context}
+            )
+        else:
+            self._logger.error(
+                f"Tool execution error: {tool_name}",
+                extra={"error": str(error), "context": context},
+                exc_info=True
+            )
+
+
+# 默认错误处理器实例
+default_tool_error_handler = ToolErrorHandler()
+
+
+__all__ = [
+    # Base
+    "ClaudeCodeError",
+    # Tool errors
+    "ToolError",
+    "ToolNotFoundError",
+    "ToolExecutionError",
+    "ToolTimeoutError",
+    "ToolValidationError",
+    "ToolPermissionError",
+    "ToolResultError",
+    # Other errors
+    "AbortError",
+    "RateLimitError",
+    "AuthenticationError",
+    "ContextLengthError",
+    "PermissionError",
+    "ValidationError",
+    "SessionError",
+    "ConfigurationError",
+    "NetworkError",
+    # Context
+    "ErrorContext",
+    # Utilities
+    "get_error_message",
+    "is_retryable_error",
+    "format_error",
+    "ToolErrorHandler",
+    "default_tool_error_handler",
+]

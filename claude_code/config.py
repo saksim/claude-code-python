@@ -476,3 +476,19 @@ class _FeaturesProxy:
 
 # For backwards compatibility
 Features = _FeaturesProxy()
+
+
+# Lazy import for settings
+def _get_settings():
+    from claude_code.utils.unified_settings import Settings
+    return Settings()
+
+
+_settings = None
+
+def get_settings() -> Any:
+    """Get the global settings instance."""
+    global _settings
+    if _settings is None:
+        _settings = _get_settings()
+    return _settings
