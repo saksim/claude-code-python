@@ -37,6 +37,7 @@ else:
     )
 
 # Re-export for convenience
+from claude_code.tools.registry import ToolRegistry
 Tool = Tool
 ToolResult = ToolResult
 ToolContext = ToolContext
@@ -64,6 +65,10 @@ from claude_code.tools.utility import (
     SendMessageTool,
     SnipTool,
     BriefTool,
+    SendUserFileTool,
+    SuggestBackgroundPRTool,
+    OverflowTestTool,
+    SyntheticOutputTool,
 )
 
 # System tools
@@ -117,6 +122,7 @@ from claude_code.tools.control import (
 
 # LSP tools
 from claude_code.tools.lsp import LSPClient, LSPServerManager, get_lsp_manager
+from claude_code.tools.analysis.lsp import LSPTool
 
 # Browser tools
 from claude_code.tools.browser import BrowserTool, BrowserConfig, create_browser_tool
@@ -132,7 +138,7 @@ from claude_code.tools.ask_question import AskUserQuestionTool, AskFollowUpQuest
 from claude_code.tools.worktree import EnterWorktreeTool, ExitWorktreeTool, ListWorktreesTool
 
 # Cron tools
-from claude_code.tools.cron import ScheduleCronTool, CronListTool, CronDeleteTool
+from claude_code.tools.cron import ScheduleCronTool, CronListTool, CronDeleteTool, CronCreateTool
 
 # Team tools
 from claude_code.tools.team import TeamCreateTool, TeamDeleteTool, TeamAddMemberTool, TeamListTool
@@ -142,76 +148,6 @@ from claude_code.tools.terminal import TerminalCaptureTool
 
 # Search tools
 from claude_code.tools.search import ToolSearchTool, RemoteTriggerTool
-
-
-class ToolRegistry:
-    """Registry for all available tools.
-    
-    Manages tool registration, retrieval, and aliasing.
-    
-    Attributes:
-        _tools: Dictionary mapping tool names to Tool instances
-        _aliases: Dictionary mapping aliases to tool names
-    """
-    
-    def __init__(self) -> None:
-        """Initialize empty tool registry."""
-        self._tools: dict[str, Tool] = {}
-        self._aliases: dict[str, str] = {}
-    
-    def register(self, tool: Tool) -> None:
-        """Register a tool.
-        
-        Args:
-            tool: Tool instance to register
-        """
-        self._tools[tool.name] = tool
-        
-        # Register aliases
-        definition = tool.get_definition()
-        for alias in definition.aliases:
-            self._aliases[alias] = tool.name
-    
-    def get(self, name: str) -> Optional[Tool]:
-        """Get a tool by name or alias.
-        
-        Args:
-            name: Tool name or alias
-            
-        Returns:
-            Tool instance or None if not found
-        """
-        if name in self._tools:
-            return self._tools[name]
-        
-        if name in self._aliases:
-            return self._tools.get(self._aliases[name])
-        
-        return None
-    
-    def list_all(self) -> list[Tool]:
-        """List all registered tools.
-        
-        Returns:
-            List of all Tool instances
-        """
-        return list(self._tools.values())
-    
-    def get_definitions(self) -> list[dict[str, Any]]:
-        """Get all tool definitions for API.
-        
-        Returns:
-            List of tool definition dictionaries
-        """
-        return [tool.get_definition().__dict__ for tool in self._tools.values()]
-    
-    def get_names(self) -> list[str]:
-        """Get all tool names.
-        
-        Returns:
-            List of tool names
-        """
-        return list(self._tools.keys())
 
 
 def create_default_registry() -> ToolRegistry:
@@ -238,6 +174,10 @@ def create_default_registry() -> ToolRegistry:
     registry.register(SendMessageTool())
     registry.register(SnipTool())
     registry.register(BriefTool())
+    registry.register(SendUserFileTool())
+    registry.register(SuggestBackgroundPRTool())
+    registry.register(OverflowTestTool())
+    registry.register(SyntheticOutputTool())
     
     # System tools
     registry.register(SleepTool())
@@ -253,6 +193,7 @@ def create_default_registry() -> ToolRegistry:
     registry.register(TaskCreateTool())
     registry.register(TaskGetTool())
     registry.register(TaskUpdateTool())
+    registry.register(TaskListTool())
     registry.register(REPLTool())
     registry.register(ReviewArtifactTool())
     
@@ -260,6 +201,7 @@ def create_default_registry() -> ToolRegistry:
     registry.register(AgentTool())
     
     # MCP tools
+    registry.register(MCPTool())
     registry.register(ListMcpResourcesTool())
     registry.register(ReadMcpResourceTool())
     registry.register(McpAuthTool())
@@ -275,6 +217,12 @@ def create_default_registry() -> ToolRegistry:
     registry.register(TaskStopTool())
     registry.register(TaskOutputTool())
     registry.register(TaskListTool())
+    
+    # LSP tools
+    try:
+        registry.register(LSPTool())
+    except Exception:
+        pass
     
     # Browser tools (if playwright available)
     try:
@@ -295,12 +243,14 @@ def create_default_registry() -> ToolRegistry:
     
     # Cron tools
     registry.register(ScheduleCronTool())
+    registry.register(CronCreateTool())
     registry.register(CronListTool())
     registry.register(CronDeleteTool())
     
     # Team tools
     registry.register(TeamCreateTool())
     registry.register(TeamDeleteTool())
+    registry.register(TeamAddMemberTool())
     registry.register(TeamListTool())
     
     # Terminal tools
@@ -316,7 +266,6 @@ def create_default_registry() -> ToolRegistry:
     return registry
 
 
-# Re-export everything for convenience
 __all__ = [
     # Base classes
     "Tool",
@@ -341,6 +290,10 @@ __all__ = [
     "SendMessageTool",
     "SnipTool",
     "BriefTool",
+    "SendUserFileTool",
+    "SuggestBackgroundPRTool",
+    "OverflowTestTool",
+    "SyntheticOutputTool",
     # System tools
     "SleepTool",
     "PowerShellTool",

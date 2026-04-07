@@ -360,27 +360,6 @@ class TeamListTool(Tool):
             ToolResult with list of teams.
         """
         team_file = Path(context.working_directory) / ".claude" / "teams.json"
-    
-    def is_read_only(self) -> bool:
-        return True
-    
-    async def execute(
-        self,
-        input_data: dict[str, Any],
-        context: ToolContext,
-        on_progress: Optional[ToolCallback] = None,
-    ) -> ToolResult:
-        """Execute the team listing.
-        
-        Args:
-            input_data: Empty dictionary (no parameters).
-            context: Tool execution context.
-            on_progress: Optional progress callback.
-            
-        Returns:
-            ToolResult with list of teams.
-        """
-        team_file = Path(context.working_directory) / ".claude" / "teams.json"
         
         if not team_file.exists():
             return ToolResult(content="No teams configured")

@@ -19,6 +19,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
+from claude_code.tools.cron.create import CronCreateTool
 
 
 class ScheduleCronTool(Tool):
@@ -300,4 +301,4 @@ class CronDeleteTool(Tool):
         return ToolResult(content=f"Deleted schedule: {name}")
 
 
-__all__ = ["ScheduleCronTool", "CronListTool", "CronDeleteTool"]
+__all__ = ["ScheduleCronTool", "CronListTool", "CronDeleteTool", "CronCreateTool"]
