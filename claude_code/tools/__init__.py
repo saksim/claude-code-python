@@ -149,6 +149,17 @@ from claude_code.tools.terminal import TerminalCaptureTool
 # Search tools
 from claude_code.tools.search import ToolSearchTool, RemoteTriggerTool
 
+# Internal/feature-gated tools
+from claude_code.tools.internal import (
+    TungstenTool,
+    WebBrowserTool,
+    PushNotificationTool,
+    SubscribePRTool,
+    CtxInspectTool,
+    ListPeersTool,
+    VerifyPlanExecutionTool,
+)
+
 
 def create_default_registry() -> ToolRegistry:
     """Create the default tool registry with all built-in tools.
@@ -262,6 +273,15 @@ def create_default_registry() -> ToolRegistry:
     # Search tools
     registry.register(ToolSearchTool())
     registry.register(RemoteTriggerTool())
+    
+    # Internal/feature-gated tools
+    registry.register(TungstenTool())
+    registry.register(WebBrowserTool())
+    registry.register(PushNotificationTool())
+    registry.register(SubscribePRTool())
+    registry.register(CtxInspectTool())
+    registry.register(ListPeersTool())
+    registry.register(VerifyPlanExecutionTool())
     
     return registry
 
