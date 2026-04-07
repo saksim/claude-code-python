@@ -73,8 +73,8 @@ class PushNotificationTool(Tool):
     
     def is_enabled(self) -> bool:
         """Check if tool is enabled."""
-        import os
-        return os.environ.get("KAIROS", "0") == "1" or os.environ.get("KAIROS_PUSH_NOTIFICATION", "0") == "1"
+        from claude_code.utils.features_config import features
+        return features.is_enabled("KAIROS")
     
     def is_read_only(self) -> bool:
         """Tool sends notifications."""

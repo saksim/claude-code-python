@@ -45,8 +45,8 @@ class CtxInspectTool(Tool):
         }
     
     def is_enabled(self) -> bool:
-        import os
-        return os.environ.get("CONTEXT_COLLAPSE", "0") == "1"
+        from claude_code.utils.features_config import features
+        return features.is_enabled("CONTEXT_COLLAPSE")
     
     def is_read_only(self) -> bool:
         return True

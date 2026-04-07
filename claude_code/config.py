@@ -454,3 +454,25 @@ def save_config() -> None:
 
 # Environment variable prefix
 ENV_PREFIX = "CLAUDE_"
+
+# Lazy import for features to avoid circular import
+def _get_features():
+    from claude_code.utils.features_config import features
+    return features
+
+_features = None
+
+def get_features():
+    """Get the global features instance."""
+    global _features
+    if _features is None:
+        _features = _get_features()
+    return _features
+
+class _FeaturesProxy:
+    """Proxy to lazy-loaded features."""
+    def __getattr__(self, name):
+        return getattr(get_features(), name)
+
+# For backwards compatibility
+Features = _FeaturesProxy()

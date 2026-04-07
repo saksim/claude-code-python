@@ -46,8 +46,8 @@ class VerifyPlanExecutionTool(Tool):
         }
     
     def is_enabled(self) -> bool:
-        import os
-        return os.environ.get("CLAUDE_CODE_VERIFY_PLAN", "0") == "1"
+        from claude_code.utils.features_config import features
+        return features.is_enabled("CLAUDE_CODE_VERIFY_PLAN")
     
     def is_read_only(self) -> bool:
         return True

@@ -87,8 +87,8 @@ class WebBrowserTool(Tool):
         Returns:
             True by default, can be disabled via feature flag
         """
-        import os
-        return os.environ.get("WEB_BROWSER_TOOL", "1") == "1"
+        from claude_code.utils.features_config import features
+        return features.is_enabled("WEB_BROWSER_TOOL")
     
     def is_read_only(self) -> bool:
         """Tool can modify browser state.

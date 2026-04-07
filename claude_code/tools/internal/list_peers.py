@@ -43,8 +43,8 @@ class ListPeersTool(Tool):
         }
     
     def is_enabled(self) -> bool:
-        import os
-        return os.environ.get("UDS_INBOX", "0") == "1"
+        from claude_code.utils.features_config import features
+        return features.is_enabled("UDS_INBOX")
     
     def is_read_only(self) -> bool:
         return True

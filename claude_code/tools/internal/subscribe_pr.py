@@ -64,8 +64,8 @@ class SubscribePRTool(Tool):
     
     def is_enabled(self) -> bool:
         """Check if tool is enabled."""
-        import os
-        return os.environ.get("KAIROS_GITHUB_WEBHOOKS", "0") == "1"
+        from claude_code.utils.features_config import features
+        return features.is_enabled("KAIROS_GITHUB_WEBHOOKS")
     
     def is_read_only(self) -> bool:
         """Tool modifies subscriptions."""

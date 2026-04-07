@@ -777,6 +777,65 @@ pytest tests/ -v
 python -m pytest --collect-only
 ```
 
+## 功能开关 (Feature Flags)
+
+Claude Code Python 支持通过功能开关启用实验性功能。
+
+### 编程方式
+
+```python
+from claude_code.config import Features
+
+# 查看所有功能
+Features.print_help()
+
+# 启用单个功能
+Features.enable("KAIROS")
+
+# 启用所有实验性功能
+Features.enable_all()
+
+# 获取已启用的工具
+print(Features.enabled_tools)
+```
+
+### 配置文件方式
+
+在项目根目录创建 `.claude/features.json`:
+
+```json
+{
+  "enabled": ["KAIROS", "WEB_BROWSER_TOOL"]
+}
+```
+
+### 环境变量方式
+
+```bash
+# 启用推送通知
+export KAIROS=1
+
+# 启用网页浏览器
+export WEB_BROWSER_TOOL=1
+```
+
+### 可用功能列表
+
+| 功能 | 环境变量 | 描述 |
+|------|----------|------|
+| Web Browser | `WEB_BROWSER_TOOL` | 网页自动化（导航、点击、截图） |
+| Push Notifications | `KAIROS` | 推送通知到用户设备 |
+| GitHub PR Subscriptions | `KAIROS_GITHUB_WEBHOOKS` | 通过 webhooks 订阅 GitHub PR 更新 |
+| Context Inspection | `CONTEXT_COLLAPSE` | 调试和检查上下文折叠状态 |
+| Peer Process List | `UDS_INBOX` | 列出连接的 peer 进程 |
+| Plan Verification | `CLAUDE_CODE_VERIFY_PLAN` | 验证计划是否正确执行 |
+| Terminal Capture | `TERMINAL_PANEL` | 捕获并显示终端输出 |
+| Overflow Test | `OVERFLOW_TEST_TOOL` | 溢出条件测试工具 |
+| History Snip | `HISTORY_SNIP` | 截取并包含历史对话上下文 |
+| Remote Trigger | `AGENT_TRIGGERS_REMOTE` | 从外部源触发 agent |
+| Monitor | `MONITOR_TOOL` | 系统监控和指标 |
+| Workflow | `WORKFLOW_SCRIPTS` | 执行自定义工作流脚本 |
+
 ## 等价审计 (Parity Audit)
 
 Claude Code Python 集成了 parity 审计功能，可以与 TypeScript 原版进行对比：
