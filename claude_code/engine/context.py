@@ -298,6 +298,8 @@ class ContextBuilder:
 
     Collects git status, CLAUDE.md files, and other contextual
     information to include in the system prompt.
+    
+    Uses caching to avoid redundant computation.
     """
 
     def __init__(self, working_dir: str | Path | None = None) -> None:
@@ -309,6 +311,12 @@ class ContextBuilder:
         self._working_dir = Path(working_dir) if working_dir else Path.cwd()
         self.git_info = GitInfo(self._working_dir)
         self.claude_md = ClaudeMdLoader(self._working_dir)
+        
+        # Caches for performance optimization
+        self._system_prompt_cache: list[str] | None = None
+        self._system_prompt_cache_dir: Path | None = None
+        self._current_date_cache: str | None = None
+        self._current_date_cache_day: str | None = None
 
     @property
     def working_dir(self) -> Path:
@@ -317,11 +325,22 @@ class ContextBuilder:
 
     def get_current_date(self) -> str:
         """Get current date formatted for display.
+        
+        Cached for performance - only recomputed when date changes.
 
         Returns:
             Formatted date string (YYYY-MM-DD).
         """
-        return datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Use cached date if still valid
+        if self._current_date_cache is not None and self._current_date_cache_day == today:
+            return self._current_date_cache
+        
+        # Compute and cache
+        self._current_date_cache_day = today
+        self._current_date_cache = today
+        return self._current_date_cache
 
     def get_system_context(self) -> dict[str, Any]:
         """Get system context that doesn't change per conversation.
@@ -359,10 +378,18 @@ class ContextBuilder:
 
     def build_system_prompt_parts(self) -> list[str]:
         """Build parts for system prompt.
+        
+        Cached based on working directory to avoid redundant computation.
 
         Returns:
             List of context strings to include in system prompt.
         """
+        # Check cache validity
+        if self._system_prompt_cache is not None:
+            if self._system_prompt_cache_dir == self._working_dir:
+                return self._system_prompt_cache
+        
+        # Compute and cache
         parts: list[str] = []
 
         git_context = self.get_system_context()
@@ -375,6 +402,10 @@ class ContextBuilder:
         if "currentDate" in user_context:
             parts.append(user_context["currentDate"])
 
+        # Store in cache
+        self._system_prompt_cache = parts
+        self._system_prompt_cache_dir = self._working_dir
+        
         return parts
 
     def invalidate_cache(self) -> None:
@@ -384,6 +415,12 @@ class ContextBuilder:
         self.git_info._branch = None
         self.git_info._status = None
         self.git_info._recent_commits = None
+        
+        # Invalidate computed caches
+        self._system_prompt_cache = None
+        self._system_prompt_cache_dir = None
+        self._current_date_cache = None
+        self._current_date_cache_day = None
 
 
 class PermissionMode(Enum):

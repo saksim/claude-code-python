@@ -35,7 +35,7 @@ class SkillSource(Enum):
     MCP = "mcp"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Skill:
     """
     A skill definition.
@@ -113,7 +113,7 @@ class SkillInvocation:
     invocation_id: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BundledSkillSpec:
     """Specification for a bundled skill.
     

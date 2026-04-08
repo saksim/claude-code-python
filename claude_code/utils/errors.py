@@ -1,10 +1,9 @@
 """Error handling utilities for Claude Code Python."""
 
-from __future__ import annotations
-
+import logging
 import traceback
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
 class ClaudeCodeError(Exception):
@@ -15,7 +14,7 @@ class ClaudeCodeError(Exception):
         code: Optional error code for programmatic handling.
     """
 
-    def __init__(self, message: str, code: str | None = None) -> None:
+    def __init__(self, message: str, code: Optional[str] = None) -> None:
         super().__init__(message)
         self.code = code
 
@@ -29,17 +28,13 @@ class AbortError(ClaudeCodeError):
 class RateLimitError(ClaudeCodeError):
     """Rate limit exceeded."""
 
-    pass
+    def __init__(self, message: str, retry_after: Optional[float] = None) -> None:
+        super().__init__(message, code="RATE_LIMIT")
+        self.retry_after = retry_after
 
 
 class AuthenticationError(ClaudeCodeError):
     """Authentication failed."""
-
-    pass
-
-
-class ContextLengthError(ClaudeCodeError):
-    """Context too long."""
 
     pass
 
@@ -50,29 +45,22 @@ class PermissionError(ClaudeCodeError):
     pass
 
 
+class ContextLengthError(ClaudeCodeError):
+    """Context length exceeded."""
+
+    pass
+
+
 class ValidationError(ClaudeCodeError):
-    """Input validation failed."""
+    """Validation failed."""
 
     pass
 
 
 class ToolError(ClaudeCodeError):
-    """Tool execution error.
+    """Tool execution error."""
 
-    Attributes:
-        message: The error message.
-        tool_name: Name of the tool that caused the error.
-        code: Optional error code.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        tool_name: str = "",
-        code: str | None = None,
-    ) -> None:
-        super().__init__(message, code)
-        self.tool_name = tool_name
+    pass
 
 
 class SessionError(ClaudeCodeError):
@@ -93,34 +81,186 @@ class NetworkError(ClaudeCodeError):
     pass
 
 
-@dataclass(frozen=True, slots=True)
-class ErrorContext:
-    """Context for an error.
+class ToolExecutionError(ClaudeCodeError):
+    """Tool execution failed.
 
     Attributes:
-        tool_name: Name of the tool that was executing.
-        message_id: ID of the message being processed.
-        session_id: ID of the current session.
-        additional_info: Additional error context.
+        tool_name: Name of the tool that failed.
+        input_data: Input that was provided to the tool.
     """
 
-    tool_name: str | None = None
-    message_id: str | None = None
-    session_id: str | None = None
-    additional_info: dict[str, Any] = field(default_factory=dict)
+    def __init__(
+        self,
+        message: str,
+        tool_name: Optional[str] = None,
+        input_data: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(message, code="TOOL_ERROR")
+        self.tool_name = tool_name
+        self.input_data = input_data
+
+
+class ContextError(ClaudeCodeError):
+    """Context-related error."""
+
+    pass
+
+
+class APIError(ClaudeCodeError):
+    """API communication error.
+
+    Attributes:
+        status_code: HTTP status code if available.
+        response: Optional response data.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status_code: Optional[int] = None,
+        response: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(message, code="API_ERROR")
+        self.status_code = status_code
+        self.response = response
+
+
+@dataclass
+class ErrorContext:
+    """Context information for an error.
+
+    Attributes:
+        error_type: Type of error.
+        message: Error message.
+        stack_trace: Optional stack trace.
+        metadata: Additional context data.
+    """
+
+    error_type: str
+    message: str
+    stack_trace: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+class ToolErrorHandler:
+    """Handler for tool execution errors.
+
+    Provides consistent error handling and recovery strategies.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the error handler."""
+        self._error_counts: Dict[str, int] = {}
+        self._error_history: List[ErrorContext] = []
+
+    def handle_error(self, error: Exception, tool_name: str) -> ErrorContext:
+        """Handle a tool execution error.
+
+        Args:
+            error: The exception that occurred.
+            tool_name: Name of the tool that failed.
+
+        Returns:
+            ErrorContext with error details.
+        """
+        # Track error counts
+        if tool_name not in self._error_counts:
+            self._error_counts[tool_name] = 0
+        self._error_counts[tool_name] += 1
+
+        # Create error context
+        context = ErrorContext(
+            error_type=type(error).__name__,
+            message=str(error),
+            stack_trace=traceback.format_exc(),
+            metadata={"tool_name": tool_name, "count": self._error_counts[tool_name]},
+        )
+
+        self._error_history.append(context)
+
+        # Keep only last 100 errors
+        if len(self._error_history) > 100:
+            self._error_history = self._error_history[-100:]
+
+        # Log the error
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "Tool error: %s in %s: %s",
+            context.error_type,
+            tool_name,
+            context.message,
+        )
+
+        return context
+
+    def get_error_count(self, tool_name: str) -> int:
+        """Get error count for a tool.
+
+        Args:
+            tool_name: Name of the tool.
+
+        Returns:
+            Number of errors for the tool.
+        """
+        return self._error_counts.get(tool_name, 0)
+
+    def get_recent_errors(self, limit: int = 10) -> List[ErrorContext]:
+        """Get recent errors.
+
+        Args:
+            limit: Maximum number of errors to return.
+
+        Returns:
+            List of recent error contexts.
+        """
+        return self._error_history[-limit:]
+
+    def reset_errors(self, tool_name: Optional[str] = None) -> None:
+        """Reset error tracking.
+
+        Args:
+            tool_name: Optional tool name to reset. If None, reset all.
+        """
+        if tool_name:
+            self._error_counts.pop(tool_name, None)
+        else:
+            self._error_counts.clear()
+            self._error_history.clear()
+
+
+def format_error(error: Exception, include_traceback: bool = False) -> str:
+    """Format an exception for display.
+
+    Args:
+        error: The exception to format.
+        include_traceback: Whether to include the traceback.
+
+    Returns:
+        Formatted error string.
+    """
+    lines = [
+        f"{type(error).__name__}: {str(error)}",
+    ]
+
+    if include_traceback:
+        lines.append("")
+        lines.append("Traceback:")
+        lines.append(traceback.format_exc())
+
+    return "\n".join(lines)
 
 
 def get_error_message(error: Exception) -> str:
     """Get a user-friendly error message.
 
     Args:
-        error: The exception to extract message from.
+        error: The exception.
 
     Returns:
-        A string representation of the error.
+        User-friendly error message.
     """
-    if isinstance(error, ClaudeCodeError):
-        return str(error)
+    if hasattr(error, "message"):
+        return error.message
     return str(error)
 
 
@@ -131,29 +271,25 @@ def is_retryable_error(error: Exception) -> bool:
         error: The exception to check.
 
     Returns:
-        True if the operation can be retried.
+        True if the operation should be retried.
     """
-    if isinstance(error, RateLimitError):
+    retryable_types = (
+        RateLimitError,
+        ConnectionError,
+        TimeoutError,
+    )
+
+    # Check if it's a retryable type
+    if isinstance(error, retryable_types):
         return True
-    if isinstance(error, NetworkError):
-        return True
-    return False
 
+    # Check for retryable messages
+    error_str = str(error).lower()
+    retryable_patterns = [
+        "timeout",
+        "connection",
+        "temporary",
+        "unavailable",
+    ]
 
-def format_error(error: Exception, include_traceback: bool = False) -> str:
-    """Format an error for display.
-
-    Args:
-        error: The exception to format.
-        include_traceback: Whether to include the traceback.
-
-    Returns:
-        Formatted error string.
-    """
-    message = get_error_message(error)
-
-    if include_traceback:
-        tb = traceback.format_exception(type(error), error, error.__traceback__)
-        return f"{message}\n\nTraceback:\n{''.join(tb)}"
-
-    return message
+    return any(pattern in error_str for pattern in retryable_patterns)

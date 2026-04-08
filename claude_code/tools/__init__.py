@@ -37,6 +37,7 @@ else:
     )
 
 # Re-export for convenience
+from claude_code.tools.registry import ToolRegistry
 Tool = Tool
 ToolResult = ToolResult
 ToolContext = ToolContext
@@ -64,6 +65,10 @@ from claude_code.tools.utility import (
     SendMessageTool,
     SnipTool,
     BriefTool,
+    SendUserFileTool,
+    SuggestBackgroundPRTool,
+    OverflowTestTool,
+    SyntheticOutputTool,
 )
 
 # System tools
@@ -117,6 +122,7 @@ from claude_code.tools.control import (
 
 # LSP tools
 from claude_code.tools.lsp import LSPClient, LSPServerManager, get_lsp_manager
+from claude_code.tools.analysis.lsp import LSPTool
 
 # Browser tools
 from claude_code.tools.browser import BrowserTool, BrowserConfig, create_browser_tool
@@ -132,7 +138,7 @@ from claude_code.tools.ask_question import AskUserQuestionTool, AskFollowUpQuest
 from claude_code.tools.worktree import EnterWorktreeTool, ExitWorktreeTool, ListWorktreesTool
 
 # Cron tools
-from claude_code.tools.cron import ScheduleCronTool, CronListTool, CronDeleteTool
+from claude_code.tools.cron import ScheduleCronTool, CronListTool, CronDeleteTool, CronCreateTool
 
 # Team tools
 from claude_code.tools.team import TeamCreateTool, TeamDeleteTool, TeamAddMemberTool, TeamListTool
@@ -143,180 +149,146 @@ from claude_code.tools.terminal import TerminalCaptureTool
 # Search tools
 from claude_code.tools.search import ToolSearchTool, RemoteTriggerTool
 
-
-class ToolRegistry:
-    """Registry for all available tools.
-    
-    Manages tool registration, retrieval, and aliasing.
-    
-    Attributes:
-        _tools: Dictionary mapping tool names to Tool instances
-        _aliases: Dictionary mapping aliases to tool names
-    """
-    
-    def __init__(self) -> None:
-        """Initialize empty tool registry."""
-        self._tools: dict[str, Tool] = {}
-        self._aliases: dict[str, str] = {}
-    
-    def register(self, tool: Tool) -> None:
-        """Register a tool.
-        
-        Args:
-            tool: Tool instance to register
-        """
-        self._tools[tool.name] = tool
-        
-        # Register aliases
-        definition = tool.get_definition()
-        for alias in definition.aliases:
-            self._aliases[alias] = tool.name
-    
-    def get(self, name: str) -> Optional[Tool]:
-        """Get a tool by name or alias.
-        
-        Args:
-            name: Tool name or alias
-            
-        Returns:
-            Tool instance or None if not found
-        """
-        if name in self._tools:
-            return self._tools[name]
-        
-        if name in self._aliases:
-            return self._tools.get(self._aliases[name])
-        
-        return None
-    
-    def list_all(self) -> list[Tool]:
-        """List all registered tools.
-        
-        Returns:
-            List of all Tool instances
-        """
-        return list(self._tools.values())
-    
-    def get_definitions(self) -> list[dict[str, Any]]:
-        """Get all tool definitions for API.
-        
-        Returns:
-            List of tool definition dictionaries
-        """
-        return [tool.get_definition().__dict__ for tool in self._tools.values()]
-    
-    def get_names(self) -> list[str]:
-        """Get all tool names.
-        
-        Returns:
-            List of tool names
-        """
-        return list(self._tools.keys())
+# Internal/feature-gated tools
+from claude_code.tools.internal import (
+    TungstenTool,
+    WebBrowserTool,
+    PushNotificationTool,
+    SubscribePRTool,
+    CtxInspectTool,
+    ListPeersTool,
+    VerifyPlanExecutionTool,
+)
 
 
 def create_default_registry() -> ToolRegistry:
     """Create the default tool registry with all built-in tools.
     
+    Uses lazy loading - tools are only instantiated when first accessed.
+    This significantly improves startup time by deferring object creation.
+    
     Returns:
-        Configured ToolRegistry with all tools registered
+        Configured ToolRegistry with all tools registered (lazy)
     """
-    registry = ToolRegistry()
+    registry = ToolRegistry(lazy=True)
     
-    # Builtin tools
-    registry.register(BashTool())
-    registry.register(ReadTool())
-    registry.register(WriteTool())
-    registry.register(EditTool())
-    registry.register(GlobTool())
-    registry.register(GrepTool())
-    registry.register(NotebookEditTool())
+    # Builtin tools - lazy registration
+    registry.register_lazy("bash", lambda: BashTool(), ["shell", "sh"])
+    registry.register_lazy("read", lambda: ReadTool(), ["file_read", "read_file"])
+    registry.register_lazy("write", lambda: WriteTool(), ["file_write", "write_file"])
+    registry.register_lazy("edit", lambda: EditTool(), ["file_edit"])
+    registry.register_lazy("glob", lambda: GlobTool(), ["glob_files"])
+    registry.register_lazy("grep", lambda: GrepTool(), ["search", "find"])
+    registry.register_lazy("notebook_edit", lambda: NotebookEditTool())
     
-    # Utility tools
-    registry.register(TodoWriteTool())
-    registry.register(WebSearchTool())
-    registry.register(WebFetchTool())
-    registry.register(SendMessageTool())
-    registry.register(SnipTool())
-    registry.register(BriefTool())
+    # Utility tools - lazy registration
+    registry.register_lazy("todo_write", lambda: TodoWriteTool(), ["todo", "task"])
+    registry.register_lazy("web_search", lambda: WebSearchTool(), ["search_web"])
+    registry.register_lazy("web_fetch", lambda: WebFetchTool(), ["fetch_url", "http_get"])
+    registry.register_lazy("send_message", lambda: SendMessageTool())
+    registry.register_lazy("snip", lambda: SnipTool())
+    registry.register_lazy("brief", lambda: BriefTool())
+    registry.register_lazy("send_user_file", lambda: SendUserFileTool())
+    registry.register_lazy("suggest_background_pr", lambda: SuggestBackgroundPRTool())
+    registry.register_lazy("overflow_test", lambda: OverflowTestTool())
+    registry.register_lazy("synthetic_output", lambda: SyntheticOutputTool())
     
-    # System tools
-    registry.register(SleepTool())
-    registry.register(PowerShellTool())
-    registry.register(MonitorTool())
-    registry.register(ConfigTool())
+    # System tools - lazy registration
+    registry.register_lazy("sleep", lambda: SleepTool())
+    registry.register_lazy("powershell", lambda: PowerShellTool(), ["ps1"])
+    registry.register_lazy("monitor", lambda: MonitorTool())
+    registry.register_lazy("config", lambda: ConfigTool())
     
-    # Workflow tools
-    registry.register(VerifyTool())
-    registry.register(EnterPlanModeTool())
-    registry.register(ExitPlanModeTool())
-    registry.register(WorkflowTool())
-    registry.register(TaskCreateTool())
-    registry.register(TaskGetTool())
-    registry.register(TaskUpdateTool())
-    registry.register(REPLTool())
-    registry.register(ReviewArtifactTool())
+    # Workflow tools - lazy registration
+    registry.register_lazy("verify", lambda: VerifyTool())
+    registry.register_lazy("enter_plan_mode", lambda: EnterPlanModeTool())
+    registry.register_lazy("exit_plan_mode", lambda: ExitPlanModeTool())
+    registry.register_lazy("workflow", lambda: WorkflowTool())
+    registry.register_lazy("task_create", lambda: TaskCreateTool())
+    registry.register_lazy("task_get", lambda: TaskGetTool())
+    registry.register_lazy("task_update", lambda: TaskUpdateTool())
+    registry.register_lazy("task_list", lambda: TaskListTool())
+    registry.register_lazy("repl", lambda: REPLTool())
+    registry.register_lazy("review_artifact", lambda: ReviewArtifactTool())
     
-    # Agent tools
-    registry.register(AgentTool())
+    # Agent tools - lazy registration
+    registry.register_lazy("agent", lambda: AgentTool())
     
-    # MCP tools
-    registry.register(ListMcpResourcesTool())
-    registry.register(ReadMcpResourceTool())
-    registry.register(McpAuthTool())
-    registry.register(ListMcpToolsTool())
-    registry.register(ListMcpPromptsTool())
+    # MCP tools - lazy registration
+    registry.register_lazy("mcp", lambda: MCPTool(), ["mcp_tool"])
+    registry.register_lazy("list_mcp_resources", lambda: ListMcpResourcesTool())
+    registry.register_lazy("read_mcp_resource", lambda: ReadMcpResourceTool())
+    registry.register_lazy("mcp_auth", lambda: McpAuthTool())
+    registry.register_lazy("list_mcp_tools", lambda: ListMcpToolsTool())
+    registry.register_lazy("list_mcp_prompts", lambda: ListMcpPromptsTool())
     
-    # Skills tools
-    registry.register(SkillTool())
-    registry.register(ListSkillsTool())
-    registry.register(DiscoverSkillsTool())
+    # Skills tools - lazy registration
+    registry.register_lazy("skill", lambda: SkillTool())
+    registry.register_lazy("list_skills", lambda: ListSkillsTool())
+    registry.register_lazy("discover_skills", lambda: DiscoverSkillsTool())
     
-    # Control tools
-    registry.register(TaskStopTool())
-    registry.register(TaskOutputTool())
-    registry.register(TaskListTool())
+    # Control tools - lazy registration
+    registry.register_lazy("task_stop", lambda: TaskStopTool())
+    registry.register_lazy("task_output", lambda: TaskOutputTool())
+    # Note: task_list already registered above
+    
+    # LSP tools (may fail if dependencies not available)
+    try:
+        registry.register_lazy("lsp", lambda: LSPTool())
+    except Exception:
+        pass
     
     # Browser tools (if playwright available)
     try:
-        registry.register(BrowserTool())
+        registry.register_lazy("browser", lambda: BrowserTool())
     except Exception:
         pass
     
     # Analysis tools
-    registry.register(AnalyzeTool())
+    registry.register_lazy("analyze", lambda: AnalyzeTool())
     
     # Ask question tools
-    registry.register(AskUserQuestionTool())
+    registry.register_lazy("ask_question", lambda: AskUserQuestionTool())
     
     # Worktree tools
-    registry.register(EnterWorktreeTool())
-    registry.register(ExitWorktreeTool())
-    registry.register(ListWorktreesTool())
+    registry.register_lazy("enter_worktree", lambda: EnterWorktreeTool())
+    registry.register_lazy("exit_worktree", lambda: ExitWorktreeTool())
+    registry.register_lazy("list_worktrees", lambda: ListWorktreesTool())
     
     # Cron tools
-    registry.register(ScheduleCronTool())
-    registry.register(CronListTool())
-    registry.register(CronDeleteTool())
+    registry.register_lazy("schedule_cron", lambda: ScheduleCronTool())
+    registry.register_lazy("cron_create", lambda: CronCreateTool())
+    registry.register_lazy("cron_list", lambda: CronListTool())
+    registry.register_lazy("cron_delete", lambda: CronDeleteTool())
     
     # Team tools
-    registry.register(TeamCreateTool())
-    registry.register(TeamDeleteTool())
-    registry.register(TeamListTool())
+    registry.register_lazy("team_create", lambda: TeamCreateTool())
+    registry.register_lazy("team_delete", lambda: TeamDeleteTool())
+    registry.register_lazy("team_add_member", lambda: TeamAddMemberTool())
+    registry.register_lazy("team_list", lambda: TeamListTool())
     
-    # Terminal tools
+    # Terminal tools (may fail if dependencies not available)
     try:
-        registry.register(TerminalCaptureTool())
+        registry.register_lazy("terminal_capture", lambda: TerminalCaptureTool())
     except Exception:
         pass
     
     # Search tools
-    registry.register(ToolSearchTool())
-    registry.register(RemoteTriggerTool())
+    registry.register_lazy("tool_search", lambda: ToolSearchTool())
+    registry.register_lazy("remote_trigger", lambda: RemoteTriggerTool())
+    
+    # Internal/feature-gated tools
+    registry.register_lazy("tungsten", lambda: TungstenTool())
+    registry.register_lazy("web_browser", lambda: WebBrowserTool())
+    registry.register_lazy("push_notification", lambda: PushNotificationTool())
+    registry.register_lazy("subscribe_pr", lambda: SubscribePRTool())
+    registry.register_lazy("ctx_inspect", lambda: CtxInspectTool())
+    registry.register_lazy("list_peers", lambda: ListPeersTool())
+    registry.register_lazy("verify_plan_execution", lambda: VerifyPlanExecutionTool())
     
     return registry
 
 
-# Re-export everything for convenience
 __all__ = [
     # Base classes
     "Tool",
@@ -341,6 +313,10 @@ __all__ = [
     "SendMessageTool",
     "SnipTool",
     "BriefTool",
+    "SendUserFileTool",
+    "SuggestBackgroundPRTool",
+    "OverflowTestTool",
+    "SyntheticOutputTool",
     # System tools
     "SleepTool",
     "PowerShellTool",

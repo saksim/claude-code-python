@@ -50,8 +50,31 @@ from claude_code.services.mcp.client import (
 from claude_code.services.cache_service import (
     CacheService,
     CacheEntry,
+    CacheConfig,
+    CacheStrategy,
     cached,
     get_cache,
+)
+
+from claude_code.services.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerManager,
+    CircuitBreakerConfig,
+    CircuitBreakerOpenError,
+    CircuitState,
+    get_circuit_breaker_manager,
+)
+
+from claude_code.services.retry_policy import (
+    RetryConfig,
+    RetryStrategy,
+    RetryExhaustedError,
+    retry_async,
+    retry_sync,
+    with_retry,
+    RETRY_QUICK,
+    RETRY_DEFAULT,
+    RETRY_AGGRESSIVE,
 )
 
 from claude_code.services.telemetry_service import (
@@ -106,6 +129,48 @@ from claude_code.services.permissions_manager import (
     get_permissions_manager,
 )
 
+from claude_code.services.health import (
+    HealthCheck,
+    HealthCheckResult,
+    HealthStatus,
+    HealthCheckRegistry,
+    get_health_check_registry,
+    health_check,
+    liveness_check,
+    readiness_check,
+)
+
+from claude_code.services.shutdown import (
+    ShutdownManager,
+    ShutdownConfig,
+    ShutdownPhase,
+    Application,
+    get_shutdown_manager,
+)
+
+from claude_code.services.event_bus import (
+    EventBus,
+    Event,
+    EventPriority,
+    EventHandler,
+    get_event_bus,
+    set_event_bus,
+    on_event,
+    on_all_events,
+    ToolEvents,
+    APIEvents,
+    SystemEvents,
+)
+
+from claude_code.services.websocket import (
+    WebSocketServer,
+    WebSocketClient,
+    WebSocketMessage,
+    WebSocketState,
+    get_websocket_server,
+    start_websocket_server,
+)
+
 __all__ = [
     # Token estimation
     "TokenEstimator",
@@ -147,8 +212,18 @@ __all__ = [
     # Cache
     "CacheService",
     "CacheEntry",
+    "CacheConfig",
+    "CacheStrategy",
     "cached",
     "get_cache",
+    
+    # Circuit Breaker
+    "CircuitBreaker",
+    "CircuitBreakerManager",
+    "CircuitBreakerConfig",
+    "CircuitBreakerOpenError",
+    "CircuitState",
+    "get_circuit_breaker_manager",
     
     # Telemetry
     "TelemetryService",
@@ -194,4 +269,53 @@ __all__ = [
     "PermissionRule",
     "PermissionRequest",
     "get_permissions_manager",
+    
+    # Retry Policy
+    "RetryConfig",
+    "RetryStrategy",
+    "RetryExhaustedError",
+    "retry_async",
+    "retry_sync",
+    "with_retry",
+    "RETRY_QUICK",
+    "RETRY_DEFAULT",
+    "RETRY_AGGRESSIVE",
+    
+    # Health Check
+    "HealthCheck",
+    "HealthCheckResult",
+    "HealthStatus",
+    "HealthCheckRegistry",
+    "get_health_check_registry",
+    "health_check",
+    "liveness_check",
+    "readiness_check",
+    
+    # Shutdown
+    "ShutdownManager",
+    "ShutdownConfig",
+    "ShutdownPhase",
+    "Application",
+    "get_shutdown_manager",
+    
+    # Event Bus
+    "EventBus",
+    "Event",
+    "EventPriority",
+    "EventHandler",
+    "get_event_bus",
+    "set_event_bus",
+    "on_event",
+    "on_all_events",
+    "ToolEvents",
+    "APIEvents",
+    "SystemEvents",
+    
+    # WebSocket
+    "WebSocketServer",
+    "WebSocketClient",
+    "WebSocketMessage",
+    "WebSocketState",
+    "get_websocket_server",
+    "start_websocket_server",
 ]

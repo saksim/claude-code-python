@@ -3,15 +3,13 @@
 Handles rate limiting for API calls with exponential backoff.
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 from asyncio import Lock
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
 class RateLimitError(Exception):
@@ -22,7 +20,7 @@ class RateLimitError(Exception):
         retry_after: Seconds to wait before retrying.
     """
 
-    def __init__(self, message: str, retry_after: float | None = None) -> None:
+    def __init__(self, message: str, retry_after: Optional[float] = None) -> None:
         super().__init__(message)
         self.retry_after = retry_after
 
@@ -35,7 +33,7 @@ class RateLimitMode(Enum):
     QUEUE = "queue"  # Queue requests for later
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RateLimitConfig:
     """Configuration for rate limiting.
 
@@ -56,7 +54,7 @@ class RateLimitConfig:
     mode: RateLimitMode = RateLimitMode.RETRY
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RateLimitStatus:
     """Current rate limit status.
 
@@ -70,9 +68,9 @@ class RateLimitStatus:
 
     requests_this_minute: int = 0
     requests_this_second: int = 0
-    last_request_time: float = field(default_factory=time.time)
+    last_request_time: float = 0.0
     remaining_requests: int = 50
-    reset_time: float | None = None
+    reset_time: Optional[float] = None
 
 
 class RateLimiter:
@@ -81,7 +79,7 @@ class RateLimiter:
     Tracks requests per second and per minute to respect API limits.
     """
 
-    def __init__(self, config: RateLimitConfig | None = None) -> None:
+    def __init__(self, config: Optional[RateLimitConfig] = None) -> None:
         """Initialize rate limiter.
 
         Args:
@@ -89,10 +87,10 @@ class RateLimiter:
         """
         self.config = config or RateLimitConfig()
         self._lock = Lock()
-        self._minute_window: list[float] = []
-        self._second_window: list[float] = []
+        self._minute_window: List[float] = []
+        self._second_window: List[float] = []
         self._status = RateLimitStatus()
-        self._request_counts: dict[str, list[float]] = defaultdict(list)
+        self._request_counts: Dict[str, List[float]] = defaultdict(list)
 
     async def acquire(self, key: str = "default") -> None:
         """Acquire permission to make a request.
@@ -115,7 +113,7 @@ class RateLimiter:
 
                 # Calculate backoff delay
                 delay = min(
-                    self.config.base_delay * (2**retry_count),
+                    self.config.base_delay * (2 ** retry_count),
                     self.config.max_delay,
                 )
 
@@ -259,7 +257,7 @@ class TokenBucketRateLimiter:
             self._tokens -= tokens
 
 
-_rate_limiter: RateLimiter | None = None
+_rate_limiter: Optional[RateLimiter] = None
 
 
 def get_rate_limiter() -> RateLimiter:

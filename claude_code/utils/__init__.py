@@ -126,6 +126,8 @@ from claude_code.utils.json import (
     unflatten_json,
 )
 
+from claude_code.utils.features import FeatureDiscovery, FeatureInfo
+
 __all__ = [
     # Errors
     "ClaudeCodeError",
@@ -241,4 +243,8 @@ __all__ = [
     "set_json_path",
     "flatten_json",
     "unflatten_json",
+    
+    # Features
+    "FeatureDiscovery",
+    "FeatureInfo",
 ]
