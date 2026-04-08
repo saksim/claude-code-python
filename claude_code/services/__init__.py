@@ -148,6 +148,29 @@ from claude_code.services.shutdown import (
     get_shutdown_manager,
 )
 
+from claude_code.services.event_bus import (
+    EventBus,
+    Event,
+    EventPriority,
+    EventHandler,
+    get_event_bus,
+    set_event_bus,
+    on_event,
+    on_all_events,
+    ToolEvents,
+    APIEvents,
+    SystemEvents,
+)
+
+from claude_code.services.websocket import (
+    WebSocketServer,
+    WebSocketClient,
+    WebSocketMessage,
+    WebSocketState,
+    get_websocket_server,
+    start_websocket_server,
+)
+
 __all__ = [
     # Token estimation
     "TokenEstimator",
@@ -274,4 +297,25 @@ __all__ = [
     "ShutdownPhase",
     "Application",
     "get_shutdown_manager",
+    
+    # Event Bus
+    "EventBus",
+    "Event",
+    "EventPriority",
+    "EventHandler",
+    "get_event_bus",
+    "set_event_bus",
+    "on_event",
+    "on_all_events",
+    "ToolEvents",
+    "APIEvents",
+    "SystemEvents",
+    
+    # WebSocket
+    "WebSocketServer",
+    "WebSocketClient",
+    "WebSocketMessage",
+    "WebSocketState",
+    "get_websocket_server",
+    "start_websocket_server",
 ]

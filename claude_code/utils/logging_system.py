@@ -1,5 +1,4 @@
-"""
-Claude Code Python - Unified Logging System
+"""Claude Code Python - Unified Logging System
 统一日志系统，支持结构化日志、多种输出、级别控制.
 
 Following TOP Python Dev standards:
@@ -9,14 +8,12 @@ Following TOP Python Dev standards:
 - Structured logging
 """
 
-from __future__ import annotations
-
 import logging
 import sys
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 from contextlib import contextmanager
@@ -38,14 +35,14 @@ class LogFormat(Enum):
     SIMPLE = "simple"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LogEntry:
     """日志条目."""
     timestamp: str
     level: str
     logger: str
     message: str
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: Dict[str, Any] = field(default_factory=dict)
 
 
 class ClaudeCodeLogger:
@@ -65,7 +62,7 @@ class ClaudeCodeLogger:
         ...     logger.info("Processing request")
     """
     
-    _instances: dict[str, "ClaudeCodeLogger"] = {}
+    _instances: Dict[str, "ClaudeCodeLogger"] = {}
     _default_handler: Optional[logging.Handler] = None
     
     def __init__(
@@ -86,7 +83,7 @@ class ClaudeCodeLogger:
         self.name = name
         self.level = getattr(logging, level.upper())
         self.format_type = format_type
-        self._context: dict[str, Any] = {}
+        self._context: Dict[str, Any] = {}
         self._file_handler: Optional[logging.FileHandler] = None
         
         # Create logger
@@ -194,7 +191,7 @@ class ClaudeCodeLogger:
 
 
 # 全局日志配置
-_loggers: dict[str, ClaudeCodeLogger] = {}
+_loggers: Dict[str, ClaudeCodeLogger] = {}
 _default_level = "INFO"
 _default_format = LogFormat.TEXT
 
