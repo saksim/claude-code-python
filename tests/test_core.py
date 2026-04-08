@@ -180,7 +180,8 @@ class TestCacheService:
     @pytest.mark.asyncio
     async def test_cache_set_and_get(self):
         """Test setting and getting cache values."""
-        cache = CacheService(max_size=100)
+        from claude_code.services.cache_service import CacheConfig
+        cache = CacheService(config=CacheConfig(max_size=100))
         
         await cache.set("key1", "value1")
         result = await cache.get("key1")
@@ -198,9 +199,10 @@ class TestCacheService:
     @pytest.mark.asyncio
     async def test_cache_expiry(self):
         """Test cache expiration."""
+        from claude_code.services.cache_service import CacheConfig
         import time
         
-        cache = CacheService(default_ttl=0.1)
+        cache = CacheService(config=CacheConfig(default_ttl=0.1))
         
         await cache.set("key1", "value1")
         assert await cache.get("key1") == "value1"
@@ -234,7 +236,8 @@ class TestCacheService:
     @pytest.mark.asyncio
     async def test_cache_stats(self):
         """Test cache statistics."""
-        cache = CacheService(max_size=50)
+        from claude_code.services.cache_service import CacheConfig
+        cache = CacheService(config=CacheConfig(max_size=50))
         
         await cache.set("key1", "value1")
         await cache.get("key1")

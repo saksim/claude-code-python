@@ -57,7 +57,8 @@ class TokenEstimator:
         """Rough token estimation using character count.
         
         Uses 4 chars/token for English text, 2 chars/token for JSON.
-        
+        Uses round() for better accuracy on short texts.
+
         Args:
             content: Text content to estimate
             
@@ -70,11 +71,11 @@ class TokenEstimator:
         if content.strip().startswith(('{', '[')):
             try:
                 json.loads(content)
-                return len(content) // BYTES_PER_TOKEN_JSON
+                return round(len(content) / BYTES_PER_TOKEN_JSON)
             except json.JSONDecodeError:
                 pass
         
-        return len(content) // BYTES_PER_TOKEN_ENGLISH
+        return round(len(content) / BYTES_PER_TOKEN_ENGLISH)
     
     def estimate_for_file(self, content: str, file_extension: str) -> int:
         """Estimate tokens for a file based on its extension.
@@ -94,7 +95,7 @@ class TokenEstimator:
         else:
             bytes_per_token = BYTES_PER_TOKEN_ENGLISH
         
-        return len(content) // bytes_per_token
+        return round(len(content) / bytes_per_token)
     
     def estimate_for_messages(self, messages: list[dict[str, Any]]) -> int:
         """Estimate total tokens for a list of messages.

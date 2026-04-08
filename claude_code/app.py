@@ -11,56 +11,53 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-# Import DI container directly to avoid circular imports
-import importlib.util
-spec = importlib.util.spec_from_file_location("di_container", "claude_code/di/container.py")
-di_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(di_module)
-ServiceContainer = di_module.ServiceContainer
-ServiceLifecycle = di_module.ServiceLifecycle
-get_container = di_module.get_container
-set_container = di_module.set_container
+# Import DI container
+from claude_code.di.container import (
+    ServiceContainer,
+    ServiceLifecycle,
+    get_container,
+    set_container,
+)
 
 # Import services
-spec2 = importlib.util.spec_from_file_location("services", "claude_code/services/__init__.py")
-# Skip this, import individually
+from claude_code.services import (
+    TokenEstimator,
+    RateLimiter,
+    CacheService,
+    TelemetryService,
+)
 
 # Import shutdown
-spec3 = importlib.util.spec_from_file_location("shutdown", "claude_code/services/shutdown.py")
-shutdown_module = importlib.util.module_from_spec(spec3)
-spec3.loader.exec_module(shutdown_module)
-ShutdownManager = shutdown_module.ShutdownManager
-ShutdownConfig = shutdown_module.ShutdownConfig
+from claude_code.services.shutdown import (
+    ShutdownManager,
+    ShutdownConfig,
+)
 
 # Import config manager
-spec4 = importlib.util.spec_from_file_location("config_manager", "claude_code/utils/config_manager.py")
-config_module = importlib.util.module_from_spec(spec4)
-spec4.loader.exec_module(config_module)
-ConfigManager = config_module.ConfigManager
-get_config_manager = config_module.get_config_manager
+from claude_code.utils.config_manager import (
+    ConfigManager,
+    get_config_manager,
+)
 
 # Import tracing
-spec5 = importlib.util.spec_from_file_location("tracing", "claude_code/utils/tracing.py")
-tracing_module = importlib.util.module_from_spec(spec5)
-spec5.loader.exec_module(tracing_module)
-Tracer = tracing_module.Tracer
-get_tracer = tracing_module.get_tracer
+from claude_code.utils.tracing import (
+    Tracer,
+    get_tracer,
+)
 
 # Import request context
-spec6 = importlib.util.spec_from_file_location("request_context", "claude_code/utils/request_context.py")
-rc_module = importlib.util.module_from_spec(spec6)
-spec6.loader.exec_module(rc_module)
-RequestContextManager = rc_module.RequestContextManager
-generate_request_id = rc_module.generate_request_id
-get_request_id = rc_module.get_request_id
-get_correlation_id = rc_module.get_correlation_id
+from claude_code.utils.request_context import (
+    RequestContextManager,
+    generate_request_id,
+    get_request_id,
+    get_correlation_id,
+)
 
 # Import logger
-spec7 = importlib.util.spec_from_file_location("logging_system", "claude_code/utils/logging_system.py")
-logger_module = importlib.util.module_from_spec(spec7)
-spec7.loader.exec_module(logger_module)
-get_logger = logger_module.get_logger
-setup_logging = logger_module.configure_logging
+from claude_code.utils.logging_system import (
+    get_logger,
+    configure_logging,
+)
 
 
 class AppPhase(Enum):
@@ -150,7 +147,7 @@ class Application:
         self._logger.info("Initializing %s v%s", self.config.service_name, self.config.version)
         
         # 1. Setup logging
-        setup_logging(self.config.log_level)
+        configure_logging(self.config.log_level)
         
         # 2. Initialize DI Container
         self._container = ServiceContainer()

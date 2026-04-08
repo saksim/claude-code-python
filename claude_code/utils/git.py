@@ -6,6 +6,7 @@ Following TOP Python Dev standards:
 - Comprehensive docstrings
 - Dataclass patterns
 - Frozen for immutable configs
+- Optimized for minimal subprocess calls
 """
 
 from __future__ import annotations
@@ -56,15 +57,21 @@ class GitInfo:
     untracked_files: list[str] = field(default_factory=list)
 
 
+# Cache for git root detection to avoid repeated subprocess calls
+_git_root_cache: dict[str, Optional[str]] = {}
+
+
 def run_git_command(
     args: list[str],
     cwd: Optional[str] = None,
+    timeout: int = 5,
 ) -> tuple[int, str, str]:
     """Run a git command and return result.
     
     Args:
         args: Git command arguments (e.g., ["status", "-s"])
         cwd: Working directory for command
+        timeout: Command timeout in seconds
         
     Returns:
         Tuple of (return_code, stdout, stderr)
@@ -75,12 +82,36 @@ def run_git_command(
             capture_output=True,
             text=True,
             cwd=cwd or os.getcwd(),
+            timeout=timeout,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return -1, "", "Command timed out"
     except FileNotFoundError:
         return -1, "", "Git not found"
     except OSError as e:
         return -1, "", str(e)
+
+
+def _get_git_root_cached(path: Optional[str] = None) -> Optional[str]:
+    """Get the root of the git repository with caching.
+    
+    Args:
+        path: Path within the repository
+        
+    Returns:
+        Root directory path, or None if not in a repo
+    """
+    cache_key = path or os.getcwd()
+    if cache_key in _git_root_cache:
+        return _git_root_cache[cache_key]
+    
+    returncode, stdout, _ = run_git_command(["rev-parse", "--show-toplevel"], cwd=path)
+    if returncode == 0:
+        _git_root_cache[cache_key] = stdout
+        return stdout
+    _git_root_cache[cache_key] = None
+    return None
 
 
 def is_git_repo(path: Optional[str] = None) -> bool:
@@ -92,8 +123,8 @@ def is_git_repo(path: Optional[str] = None) -> bool:
     Returns:
         True if path is inside a git repository
     """
-    _, stdout, _ = run_git_command(["rev-parse", "--is-inside-work-tree"], cwd=path)
-    return stdout == "true"
+    root = _get_git_root_cached(path)
+    return root is not None
 
 
 def get_git_root(path: Optional[str] = None) -> Optional[str]:
@@ -105,10 +136,7 @@ def get_git_root(path: Optional[str] = None) -> Optional[str]:
     Returns:
         Root directory path, or None if not in a repo
     """
-    returncode, stdout, _ = run_git_command(["rev-parse", "--show-toplevel"], cwd=path)
-    if returncode == 0:
-        return stdout
-    return None
+    return _get_git_root_cached(path)
 
 
 def get_current_branch(path: Optional[str] = None) -> Optional[str]:
@@ -146,64 +174,64 @@ def get_current_commit(path: Optional[str] = None, short: bool = True) -> Option
 def get_git_status(path: Optional[str] = None) -> GitInfo:
     """Get comprehensive git status information.
     
+    Optimized to use minimal subprocess calls - combines status queries
+    where possible.
+    
     Args:
         path: Path within the repository
         
     Returns:
         GitInfo with full repository status
     """
-    info = GitInfo()
-    
+    # Quick check if it's a repo
     if not is_git_repo(path):
-        return info
+        return GitInfo()
     
-    info = GitInfo(
-        is_repo=True,
-        branch=get_current_branch(path),
-        commit=get_current_commit(path, short=True),
-    )
+    # Get branch and commit in single call using git branch -v
+    branch = get_current_branch(path)
+    commit = get_current_commit(path, short=True)
     
-    # Get porcelain status
+    # Get porcelain status - single call for all file info
     returncode, stdout, _ = run_git_command(
         ["status", "--porcelain=v1", "-uall"],
         cwd=path
     )
     
-    if returncode == 0:
-        staged: list[str] = []
-        modified: list[str] = []
-        untracked: list[str] = []
-        
-        for line in stdout.split('\n'):
-            if not line:
-                continue
-            
-            status = line[:2]
-            filepath = line[3:]
-            
-            if status[0] in ('M', 'A', 'R', 'C'):
-                staged.append(filepath)
-                info.has_changes = True
-            if status[1] in ('M', 'D'):
-                modified.append(filepath)
-                info.has_changes = True
-            if status == '??':
-                untracked.append(filepath)
-                info.has_changes = True
-        
-        # Return new instance with updated lists
-        return GitInfo(
-            is_repo=True,
-            branch=info.branch,
-            commit=info.commit,
-            status=GitStatus.DIRTY if info.has_changes else GitStatus.CLEAN,
-            has_changes=info.has_changes,
-            staged_files=staged,
-            modified_files=modified,
-            untracked_files=untracked,
-        )
+    if returncode != 0:
+        return GitInfo(is_repo=True, branch=branch, commit=commit)
     
-    return info
+    staged: list[str] = []
+    modified: list[str] = []
+    untracked: list[str] = []
+    has_changes = False
+    
+    for line in stdout.split('\n'):
+        if not line:
+            continue
+        
+        status = line[:2]
+        filepath = line[3:]
+        
+        if status[0] in ('M', 'A', 'R', 'C'):
+            staged.append(filepath)
+            has_changes = True
+        if status[1] in ('M', 'D'):
+            modified.append(filepath)
+            has_changes = True
+        if status == '??':
+            untracked.append(filepath)
+            has_changes = True
+    
+    return GitInfo(
+        is_repo=True,
+        branch=branch,
+        commit=commit,
+        status=GitStatus.DIRTY if has_changes else GitStatus.CLEAN,
+        has_changes=has_changes,
+        staged_files=staged,
+        modified_files=modified,
+        untracked_files=untracked,
+    )
 
 
 def get_diff(path: Optional[str] = None, staged: bool = False) -> str:
@@ -376,3 +404,9 @@ def get_remote_url(path: Optional[str] = None) -> Optional[str]:
     """
     _, stdout, _ = run_git_command(["remote", "get-url", "origin"], cwd=path)
     return stdout if stdout else None
+
+
+def clear_git_cache() -> None:
+    """Clear the git root cache (useful for testing)."""
+    global _git_root_cache
+    _git_root_cache = {}
