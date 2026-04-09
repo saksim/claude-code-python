@@ -98,7 +98,7 @@ class ToolSearchTool(Tool):
         if not query:
             return ToolResult(content="Error: query is required", is_error=True)
         
-        from claude_code.tools.registry import create_default_registry
+        from claude_code.tools import create_default_registry
         
         registry = create_default_registry()
         

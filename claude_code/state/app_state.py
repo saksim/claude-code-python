@@ -14,14 +14,8 @@ from enum import Enum
 from copy import deepcopy
 from datetime import datetime
 
-
-class PermissionMode(Enum):
-    """Permission mode for tool execution."""
-    DEFAULT = "default"
-    AUTO = "auto"
-    PLAN = "plan"
-    BYPASS = "bypass"
-    YOLO = "yolo"
+# PermissionMode imported from canonical source
+from claude_code.permissions import PermissionMode
 
 
 class EffortLevel(Enum):

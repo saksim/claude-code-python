@@ -25,11 +25,11 @@ DEFAULT_MODEL: str = "claude-sonnet-4-20250514"
 DEFAULT_SESSION_DIR: Path = Path.home() / ".claude" / "sessions"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class SessionMetadata:
     """Metadata for a session.
     
-    Using frozen=True, slots=True for immutability.
+    Using slots=True for memory efficiency.
     
     Attributes:
         session_id: Unique session identifier

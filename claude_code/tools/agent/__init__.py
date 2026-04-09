@@ -17,54 +17,27 @@ from uuid import uuid4
 from dataclasses import dataclass, field
 
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
+from claude_code.agents.builtin import (
+    AgentDefinition,
+    create_builtin_agents,
+    setup_builtin_agents,
+)
 
 
-@dataclass(frozen=True, slots=True)
-class AgentDefinition:
-    """Definition of an agent type.
+def _build_agent_registry() -> dict[str, AgentDefinition]:
+    """Build the complete agent registry from builtin agents.
     
-    Using frozen=True, slots=True for immutability.
-    
-    Attributes:
-        agent_type: Type identifier for the agent
-        description: Human-readable description
-        prompt: System prompt for the agent
-        model: Model to use (default: sonnet)
-        background: Whether agent runs in background
-        isolation: Isolation mode for the agent
-        permission_mode: Permission mode for the agent
+    Returns:
+        Dictionary mapping agent_type to AgentDefinition.
     """
-    agent_type: str
-    description: str
-    prompt: str
-    model: str = "sonnet"
-    background: bool = False
-    isolation: Optional[str] = None
-    permission_mode: str = "acceptEdits"
+    return create_builtin_agents()
 
 
-BUILTIN_AGENTS: dict[str, AgentDefinition] = {
-    "general-purpose": AgentDefinition(
-        agent_type="general-purpose",
-        description="General purpose agent for any task",
-        prompt="You are a helpful AI assistant.",
-    ),
-    "editor": AgentDefinition(
-        agent_type="editor",
-        description="Agent specialized in file editing",
-        prompt="You are a code editing agent. Make precise edits to files.",
-    ),
-    "reviewer": AgentDefinition(
-        agent_type="reviewer",
-        description="Agent specialized in code review",
-        prompt="You are a code review agent. Analyze code for issues.",
-    ),
-    "researcher": AgentDefinition(
-        agent_type="researcher",
-        description="Agent specialized in research and information gathering",
-        prompt="You are a research agent. Gather and summarize information.",
-    ),
-}
+# Complete agent registry, built from the unified agents/builtin.py
+BUILTIN_AGENTS: dict[str, AgentDefinition] = _build_agent_registry()
+
+# Ensure legacy AGENTS dict is also populated
+setup_builtin_agents()
 
 
 class AgentTool(Tool):
@@ -233,8 +206,8 @@ class AgentTool(Tool):
         on_progress: Optional[ToolCallback],
     ) -> ToolResult:
         """Run agent synchronously."""
-        from .claude_code.engine.query import QueryEngine
-        from .claude_code.api.client import APIClient, APIClientConfig
+        from claude_code.engine.query import QueryEngine, Message
+        from claude_code.api.client import APIClient, APIClientConfig
         
         worktree_path = None
         if isolation == "worktree":
@@ -267,7 +240,6 @@ Report your findings and results clearly."""
             
             result_parts = []
             async for event in engine.query(prompt):
-                from .claude_code.engine.query import Message, ToolUse, ToolCallResult
                 if isinstance(event, Message) and event.role == "assistant":
                     if isinstance(event.content, str):
                         result_parts.append(event.content)
@@ -301,25 +273,51 @@ Report your findings and results clearly."""
         on_progress: Optional[ToolCallback],
     ) -> ToolResult:
         """Run agent asynchronously in background."""
-        from ...tasks.manager import TaskManager
-        from ...tasks.types import TaskType, BashTask
+        from claude_code.tasks.manager import TaskManager
+        from claude_code.tasks.types import AgentTask
         
-        task_manager = TaskManager()
+        task_manager = TaskManager.get_instance()
         
         task = await task_manager.create_agent_task(
             prompt=prompt,
             model=model,
             background=True,
             description=description,
-            cwd=cwd,
         )
         
+        async def _execute_agent(task):
+            from claude_code.engine.query import QueryEngine, Message
+            from claude_code.api.client import APIClient, APIClientConfig
+            
+            api_config = APIClientConfig()
+            api_client = APIClient(api_config)
+            engine = QueryEngine(api_client=api_client)
+            engine.config.system_prompt = agent_def.prompt
+            if model:
+                engine.config.model = f"claude-{model}-4-20250514"
+            
+            result_parts = []
+            async for event in engine.query(prompt):
+                if isinstance(event, Message) and event.role == "assistant":
+                    if isinstance(event.content, str):
+                        result_parts.append(event.content)
+                elif isinstance(event, dict):
+                    if event.get("type") == "text":
+                        result_parts.append(event.get("content", ""))
+            
+            from claude_code.tasks.types import TaskResult
+            return TaskResult(
+                code=0,
+                stdout="\n".join(result_parts) if result_parts else "Agent completed with no output",
+            )
+        
+        await task_manager.start_task(task.id, executor=_execute_agent)
+        
         return ToolResult(
-            content=f"""Started background agent: {agent_name}
-Task ID: {task.id}
-Description: {description}
-
-Use /tasks to monitor progress."""
+            content=f"Started background agent: {agent_name}\n"
+                     f"Task ID: {task.id}\n"
+                     f"Description: {description}\n\n"
+                     f"Use /tasks to monitor progress."
         )
     
     async def _create_worktree(self, name: str, cwd: str) -> Optional[str]:

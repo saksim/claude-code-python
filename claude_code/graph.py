@@ -1,3 +1,5 @@
+import warnings
+warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
 """
 Claude Code Python - Command and Tool Graph
 用于分析命令和工具之间的依赖关系

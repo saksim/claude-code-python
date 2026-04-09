@@ -1,3 +1,5 @@
+import warnings
+warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
 """
 Claude Code Python - Diagnostic Snapshots
 Tool and command snapshots for diagnostics and parity tracking.

@@ -1,3 +1,5 @@
+import warnings
+warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
 """
 Claude Code Python - Feature Discovery Helper
 帮助用户发现和启用功能.

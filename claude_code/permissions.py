@@ -1,25 +1,32 @@
 """
-Claude Code Python - Simplified Permission Context
-Provides a simplified permission system for tool execution control.
+Claude Code Python - Unified Permission System
 
-Following TOP Python Dev standards:
-- Clear type hints
-- Comprehensive docstrings
-- Dataclass patterns (frozen/slots)
-- frozenset for constant sets
+This module is the single source of truth for permission types.
+All other modules must import PermissionMode from here.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from enum import Enum
 
 
-# Module-level constants
-_STRICT_DENY_TOOLS: frozenset[str] = frozenset({"bash", "powershell", "shell", "exec", "run"})
-_STRICT_ALLOW_TOOLS: frozenset[str] = frozenset({"read", "glob", "grep", "lsp"})
-_STRICT_DENY_PREFIXES: tuple[str, ...] = ("mcp_",)
-_AUTO_ALLOW_TOOLS: list[str] = ["read", "glob", "grep"]
+class PermissionMode(Enum):
+    """Permission modes for tool execution.
+    
+    Single canonical definition — all modules import from here.
+    """
+    DEFAULT = "default"
+    AUTO = "auto"
+    PLAN = "plan"
+    ACCEPT_EDITS = "acceptEdits"
+    BYPASS = "bypass"
+    YOLO = "yolo"
+
+
+# PermissionMode string values for validation
+PERMISSION_MODES: list[str] = [m.value for m in PermissionMode]
 
 
 @dataclass(frozen=True, slots=True)

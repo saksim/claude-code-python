@@ -191,21 +191,23 @@ class TaskOutputTool(Tool):
             return ToolResult(content=f"Error: {str(e)}", is_error=True)
 
 
-class TaskListTool(Tool):
-    """Tool to list all background tasks.
+class TaskControlListTool(Tool):
+    """Tool to list background tasks (control perspective).
     
     This tool provides visibility into all background tasks,
     with optional filtering by task status (running, completed, failed).
     
+    Differentiated from workflow TaskListTool which lists workflow tasks.
+    
     Attributes:
-        name: task_list
-        description: List all background tasks
+        name: task_control_list
+        description: List background tasks with status filtering
     """
     
     @property
     def name(self) -> str:
         """Tool name identifier."""
-        return "task_list"
+        return "task_control_list"
     
     @property
     def description(self) -> str:
@@ -281,4 +283,4 @@ class TaskListTool(Tool):
             return ToolResult(content=f"Error: {str(e)}", is_error=True)
 
 
-__all__ = ["TaskStopTool", "TaskOutputTool", "TaskListTool"]
+__all__ = ["TaskStopTool", "TaskOutputTool", "TaskControlListTool"]

@@ -107,11 +107,18 @@ class ToolContext:
     - Type hints
     - Docstrings
     - Sensible defaults
+    - Config propagation from main conversation to tools
     """
     working_directory: str
     environment: dict[str, str] = field(default_factory=dict)
     read_file_cache: dict[str, str] = field(default_factory=dict)
     abort_signal: Optional[asyncio.Event] = None
+    # Config propagation fields
+    permission_mode: str = "default"
+    always_allow: list[str] = field(default_factory=list)
+    always_deny: list[str] = field(default_factory=list)
+    model: Optional[str] = None
+    session_id: Optional[str] = None
     
     def get_env(self, key: str, default: str = "") -> str:
         """Get environment variable.
@@ -132,6 +139,25 @@ class ToolContext:
             True if abort signal is set.
         """
         return self.abort_signal is not None and self.abort_signal.is_set()
+    
+    def is_tool_allowed(self, tool_name: str) -> bool:
+        """Check if a tool is allowed based on permission context.
+        
+        Args:
+            tool_name: Name of the tool to check.
+            
+        Returns:
+            True if the tool is allowed.
+        """
+        if tool_name in self.always_deny:
+            return False
+        if tool_name in self.always_allow:
+            return True
+        if self.permission_mode == "yolo":
+            return True
+        if self.permission_mode == "plan":
+            return tool_name in ("read", "glob", "grep", "web_search", "web_fetch")
+        return True
 
 
 class Tool(ABC):

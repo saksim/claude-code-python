@@ -1,10 +1,13 @@
 """
 Claude Code Python - Agent Definitions
-Pre-defined agent types for different tasks.
+
+Unified agent definitions using agent_type/prompt convention.
+This module is the single source of truth for all built-in agents.
+All other modules must import from here.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Callable, Any
+from typing import Optional
 from enum import Enum
 
 
@@ -22,39 +25,54 @@ class AgentCapability(Enum):
 
 @dataclass
 class AgentDefinition:
-    """Definition of an agent type."""
-    name: str
+    """Definition of an agent type.
+    
+    This is the unified agent definition used across the entire project.
+    Uses agent_type/prompt convention (matching TypeScript version).
+    
+    Attributes:
+        agent_type: Type identifier for the agent (e.g., 'general-purpose')
+        description: Human-readable description of what this agent does
+        prompt: System prompt for the agent
+        model: Model to use (sonnet, opus, haiku, inherit)
+        capabilities: List of agent capabilities
+        background: Whether agent runs in background by default
+        isolation: Isolation mode ('worktree' or None)
+        permission_mode: Permission mode for the agent
+        color: Display color for the agent
+        tools: Tool whitelist (['*'] for all)
+        disallowed_tools: Tool blacklist
+        max_turns: Maximum number of agentic turns
+        memory: Memory scope ('user', 'project', 'local')
+        omit_claude_md: Whether to omit CLAUDE.md from context
+    """
+    agent_type: str
     description: str
-    system_prompt: str
+    prompt: str
     model: str = "sonnet"
     capabilities: list[AgentCapability] = field(default_factory=list)
     background: bool = False
     isolation: Optional[str] = None
     permission_mode: str = "acceptEdits"
     color: Optional[str] = None
-    
-    def get_system_prompt(self, context: dict = None) -> str:
-        """Get the system prompt for this agent."""
-        return self.system_prompt
+    tools: list[str] = field(default_factory=lambda: ["*"])
+    disallowed_tools: list[str] = field(default_factory=list)
+    max_turns: Optional[int] = None
+    memory: Optional[str] = None
+    omit_claude_md: bool = False
 
 
-@dataclass
-class BuiltinAgent(AgentDefinition):
-    """Built-in agent definition."""
-    is_builtin: bool = True
-
-
-AGENTS = {}
+AGENTS: dict[str, AgentDefinition] = {}
 
 
 def register_agent(agent: AgentDefinition) -> None:
     """Register an agent."""
-    AGENTS[agent.name] = agent
+    AGENTS[agent.agent_type] = agent
 
 
-def get_agent(name: str) -> Optional[AgentDefinition]:
-    """Get an agent by name."""
-    return AGENTS.get(name)
+def get_agent(agent_type: str) -> Optional[AgentDefinition]:
+    """Get an agent by type identifier."""
+    return AGENTS.get(agent_type)
 
 
 def list_agents() -> list[AgentDefinition]:
@@ -63,14 +81,18 @@ def list_agents() -> list[AgentDefinition]:
 
 
 def create_builtin_agents() -> dict[str, AgentDefinition]:
-    """Create all built-in agents."""
+    """Create all built-in agents.
+    
+    Returns:
+        Dictionary mapping agent_type to AgentDefinition.
+    """
     return {
-        "general-purpose": BuiltinAgent(
-            name="general-purpose",
+        "general-purpose": AgentDefinition(
+            agent_type="general-purpose",
             description="General purpose agent for any task",
             model="sonnet",
             capabilities=[c for c in AgentCapability],
-            system_prompt="""You are a helpful AI assistant specialized in software development.
+            prompt="""You are a helpful AI assistant specialized in software development.
 
 Your capabilities:
 - Read, write, and edit code
@@ -90,13 +112,12 @@ Communication style:
 - Show code changes clearly
 - Ask clarifying questions when needed""",
         ),
-        
-        "editor": BuiltinAgent(
-            name="editor",
+        "editor": AgentDefinition(
+            agent_type="editor",
             description="Agent specialized in file editing",
             model="sonnet",
             capabilities=[AgentCapability.CODE_EDITING, AgentCapability.REFACTORING],
-            system_prompt="""You are a code editing agent specialized in making precise file changes.
+            prompt="""You are a code editing agent specialized in making precise file changes.
 
 Your workflow:
 1. Read the file to understand its structure
@@ -110,13 +131,12 @@ Guidelines:
 - Make one change at a time
 - Don't add unnecessary comments or formatting""",
         ),
-        
-        "reviewer": BuiltinAgent(
-            name="reviewer",
+        "reviewer": AgentDefinition(
+            agent_type="reviewer",
             description="Agent specialized in code review",
             model="sonnet",
             capabilities=[AgentCapability.CODE_REVIEW],
-            system_prompt="""You are a code review agent. Your role is to analyze code and provide feedback.
+            prompt="""You are a code review agent. Your role is to analyze code and provide feedback.
 
 Review focus areas:
 - Security vulnerabilities
@@ -134,13 +154,12 @@ Output format:
 
 Be constructive and specific.""",
         ),
-        
-        "debugger": BuiltinAgent(
-            name="debugger",
+        "debugger": AgentDefinition(
+            agent_type="debugger",
             description="Agent specialized in debugging",
             model="sonnet",
             capabilities=[AgentCapability.DEBUGGING],
-            system_prompt="""You are a debugging agent. Your role is to help identify and fix issues.
+            prompt="""You are a debugging agent. Your role is to help identify and fix issues.
 
 Debugging approach:
 1. Understand the error or unexpected behavior
@@ -154,13 +173,12 @@ Guidelines:
 - Test potential fixes
 - Explain the root cause""",
         ),
-        
-        "tester": BuiltinAgent(
-            name="tester",
+        "tester": AgentDefinition(
+            agent_type="tester",
             description="Agent specialized in testing",
             model="sonnet",
             capabilities=[AgentCapability.TESTING],
-            system_prompt="""You are a testing agent. Your role is to create and run tests.
+            prompt="""You are a testing agent. Your role is to create and run tests.
 
 Test types:
 - Unit tests
@@ -175,13 +193,14 @@ Guidelines:
 - Follow testing best practices
 - Make tests readable and maintainable""",
         ),
-        
-        "researcher": BuiltinAgent(
-            name="researcher",
+        "researcher": AgentDefinition(
+            agent_type="researcher",
             description="Agent specialized in research",
             model="haiku",
             capabilities=[AgentCapability.RESEARCH],
-            system_prompt="""You are a research agent. Your role is to gather and summarize information.
+            tools=["Read", "Grep", "Glob", "WebSearch", "WebFetch"],
+            omit_claude_md=True,
+            prompt="""You are a research agent. Your role is to gather and summarize information.
 
 Research tasks:
 - Search the web for information
@@ -195,13 +214,12 @@ Guidelines:
 - Summarize key points clearly
 - Present options with tradeoffs""",
         ),
-        
-        "architect": BuiltinAgent(
-            name="architect",
+        "architect": AgentDefinition(
+            agent_type="architect",
             description="Agent specialized in system architecture",
             model="opus",
             capabilities=[AgentCapability.ARCHITECTURE],
-            system_prompt="""You are a software architecture agent. Your role is to design and analyze system architecture.
+            prompt="""You are a software architecture agent. Your role is to design and analyze system architecture.
 
 Focus areas:
 - System design and structure
@@ -216,13 +234,12 @@ Guidelines:
 - Explain tradeoffs
 - Support decisions with rationale""",
         ),
-        
-        "docs-writer": BuiltinAgent(
-            name="docs-writer",
+        "docs-writer": AgentDefinition(
+            agent_type="docs-writer",
             description="Agent specialized in documentation",
             model="sonnet",
             capabilities=[AgentCapability.DOCUMENTATION],
-            system_prompt="""You are a documentation agent. Your role is to create and improve documentation.
+            prompt="""You are a documentation agent. Your role is to create and improve documentation.
 
 Documentation types:
 - README files
@@ -237,14 +254,13 @@ Guidelines:
 - Follow documentation best practices
 - Keep docs up to date""",
         ),
-        
-        "quick": BuiltinAgent(
-            name="quick",
+        "quick": AgentDefinition(
+            agent_type="quick",
             description="Fast agent for simple tasks",
             model="haiku",
             capabilities=[AgentCapability.CODE_EDITING],
             background=False,
-            system_prompt="""You are a quick task agent for simple, fast operations.
+            prompt="""You are a quick task agent for simple, fast operations.
 
 Use for:
 - Small edits
@@ -254,14 +270,14 @@ Use for:
 
 Be fast and concise. Don't overthink.""",
         ),
-        
-        "deep": BuiltinAgent(
-            name="deep",
+        "deep": AgentDefinition(
+            agent_type="deep",
             description="Deep analysis agent for complex tasks",
             model="opus",
             capabilities=[c for c in AgentCapability],
             background=True,
-            system_prompt="""You are a deep analysis agent for complex, thorough work.
+            color="red",
+            prompt="""You are a deep analysis agent for complex, thorough work.
 
 Use for:
 - Large refactoring
@@ -276,14 +292,13 @@ Consider multiple approaches before deciding.""",
 
 
 def setup_builtin_agents() -> None:
-    """Setup all built-in agents."""
+    """Setup all built-in agents by registering them in AGENTS dict."""
     for agent in create_builtin_agents().values():
         register_agent(agent)
 
 
 __all__ = [
     "AgentDefinition",
-    "BuiltinAgent",
     "AgentCapability",
     "AGENTS",
     "register_agent",
