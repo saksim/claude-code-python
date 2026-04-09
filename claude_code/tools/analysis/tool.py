@@ -127,7 +127,7 @@ class AnalyzeTool(Tool):
             try:
                 c = comp.calculate_complexity(analysis.path)
                 lines.append(f"Complexity: {c}")
-            except:
+            except Exception:
                 pass
         
         if analysis.issues:
