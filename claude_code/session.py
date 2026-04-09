@@ -1,3 +1,5 @@
+import warnings
+warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
 """
 Claude Code Python - Session Persistence
 Session management for conversation state and history.

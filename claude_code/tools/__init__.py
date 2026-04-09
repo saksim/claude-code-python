@@ -37,7 +37,7 @@ else:
     )
 
 # Re-export for convenience
-from claude_code.tools.registry import ToolRegistry
+from claude_code.tools.registry import ToolRegistry, create_default_registry
 Tool = Tool
 ToolResult = ToolResult
 ToolContext = ToolContext
@@ -88,7 +88,7 @@ from claude_code.tools.workflow import (
     TaskCreateTool,
     TaskGetTool,
     TaskUpdateTool,
-    TaskListTool,
+    TaskControlListTool,
     REPLTool,
     ReviewArtifactTool,
 )
@@ -117,7 +117,7 @@ from claude_code.tools.skills import (
 from claude_code.tools.control import (
     TaskStopTool,
     TaskOutputTool,
-    TaskListTool,
+    TaskControlListTool,
 )
 
 # LSP tools
@@ -160,133 +160,8 @@ from claude_code.tools.internal import (
     VerifyPlanExecutionTool,
 )
 
-
-def create_default_registry() -> ToolRegistry:
-    """Create the default tool registry with all built-in tools.
-    
-    Uses lazy loading - tools are only instantiated when first accessed.
-    This significantly improves startup time by deferring object creation.
-    
-    Returns:
-        Configured ToolRegistry with all tools registered (lazy)
-    """
-    registry = ToolRegistry(lazy=True)
-    
-    # Builtin tools - lazy registration
-    registry.register_lazy("bash", lambda: BashTool(), ["shell", "sh"])
-    registry.register_lazy("read", lambda: ReadTool(), ["file_read", "read_file"])
-    registry.register_lazy("write", lambda: WriteTool(), ["file_write", "write_file"])
-    registry.register_lazy("edit", lambda: EditTool(), ["file_edit"])
-    registry.register_lazy("glob", lambda: GlobTool(), ["glob_files"])
-    registry.register_lazy("grep", lambda: GrepTool(), ["search", "find"])
-    registry.register_lazy("notebook_edit", lambda: NotebookEditTool())
-    
-    # Utility tools - lazy registration
-    registry.register_lazy("todo_write", lambda: TodoWriteTool(), ["todo", "task"])
-    registry.register_lazy("web_search", lambda: WebSearchTool(), ["search_web"])
-    registry.register_lazy("web_fetch", lambda: WebFetchTool(), ["fetch_url", "http_get"])
-    registry.register_lazy("send_message", lambda: SendMessageTool())
-    registry.register_lazy("snip", lambda: SnipTool())
-    registry.register_lazy("brief", lambda: BriefTool())
-    registry.register_lazy("send_user_file", lambda: SendUserFileTool())
-    registry.register_lazy("suggest_background_pr", lambda: SuggestBackgroundPRTool())
-    registry.register_lazy("overflow_test", lambda: OverflowTestTool())
-    registry.register_lazy("synthetic_output", lambda: SyntheticOutputTool())
-    
-    # System tools - lazy registration
-    registry.register_lazy("sleep", lambda: SleepTool())
-    registry.register_lazy("powershell", lambda: PowerShellTool(), ["ps1"])
-    registry.register_lazy("monitor", lambda: MonitorTool())
-    registry.register_lazy("config", lambda: ConfigTool())
-    
-    # Workflow tools - lazy registration
-    registry.register_lazy("verify", lambda: VerifyTool())
-    registry.register_lazy("enter_plan_mode", lambda: EnterPlanModeTool())
-    registry.register_lazy("exit_plan_mode", lambda: ExitPlanModeTool())
-    registry.register_lazy("workflow", lambda: WorkflowTool())
-    registry.register_lazy("task_create", lambda: TaskCreateTool())
-    registry.register_lazy("task_get", lambda: TaskGetTool())
-    registry.register_lazy("task_update", lambda: TaskUpdateTool())
-    registry.register_lazy("task_list", lambda: TaskListTool())
-    registry.register_lazy("repl", lambda: REPLTool())
-    registry.register_lazy("review_artifact", lambda: ReviewArtifactTool())
-    
-    # Agent tools - lazy registration
-    registry.register_lazy("agent", lambda: AgentTool())
-    
-    # MCP tools - lazy registration
-    registry.register_lazy("mcp", lambda: MCPTool(), ["mcp_tool"])
-    registry.register_lazy("list_mcp_resources", lambda: ListMcpResourcesTool())
-    registry.register_lazy("read_mcp_resource", lambda: ReadMcpResourceTool())
-    registry.register_lazy("mcp_auth", lambda: McpAuthTool())
-    registry.register_lazy("list_mcp_tools", lambda: ListMcpToolsTool())
-    registry.register_lazy("list_mcp_prompts", lambda: ListMcpPromptsTool())
-    
-    # Skills tools - lazy registration
-    registry.register_lazy("skill", lambda: SkillTool())
-    registry.register_lazy("list_skills", lambda: ListSkillsTool())
-    registry.register_lazy("discover_skills", lambda: DiscoverSkillsTool())
-    
-    # Control tools - lazy registration
-    registry.register_lazy("task_stop", lambda: TaskStopTool())
-    registry.register_lazy("task_output", lambda: TaskOutputTool())
-    # Note: task_list already registered above
-    
-    # LSP tools (may fail if dependencies not available)
-    try:
-        registry.register_lazy("lsp", lambda: LSPTool())
-    except Exception:
-        pass
-    
-    # Browser tools (if playwright available)
-    try:
-        registry.register_lazy("browser", lambda: BrowserTool())
-    except Exception:
-        pass
-    
-    # Analysis tools
-    registry.register_lazy("analyze", lambda: AnalyzeTool())
-    
-    # Ask question tools
-    registry.register_lazy("ask_question", lambda: AskUserQuestionTool())
-    
-    # Worktree tools
-    registry.register_lazy("enter_worktree", lambda: EnterWorktreeTool())
-    registry.register_lazy("exit_worktree", lambda: ExitWorktreeTool())
-    registry.register_lazy("list_worktrees", lambda: ListWorktreesTool())
-    
-    # Cron tools
-    registry.register_lazy("schedule_cron", lambda: ScheduleCronTool())
-    registry.register_lazy("cron_create", lambda: CronCreateTool())
-    registry.register_lazy("cron_list", lambda: CronListTool())
-    registry.register_lazy("cron_delete", lambda: CronDeleteTool())
-    
-    # Team tools
-    registry.register_lazy("team_create", lambda: TeamCreateTool())
-    registry.register_lazy("team_delete", lambda: TeamDeleteTool())
-    registry.register_lazy("team_add_member", lambda: TeamAddMemberTool())
-    registry.register_lazy("team_list", lambda: TeamListTool())
-    
-    # Terminal tools (may fail if dependencies not available)
-    try:
-        registry.register_lazy("terminal_capture", lambda: TerminalCaptureTool())
-    except Exception:
-        pass
-    
-    # Search tools
-    registry.register_lazy("tool_search", lambda: ToolSearchTool())
-    registry.register_lazy("remote_trigger", lambda: RemoteTriggerTool())
-    
-    # Internal/feature-gated tools
-    registry.register_lazy("tungsten", lambda: TungstenTool())
-    registry.register_lazy("web_browser", lambda: WebBrowserTool())
-    registry.register_lazy("push_notification", lambda: PushNotificationTool())
-    registry.register_lazy("subscribe_pr", lambda: SubscribePRTool())
-    registry.register_lazy("ctx_inspect", lambda: CtxInspectTool())
-    registry.register_lazy("list_peers", lambda: ListPeersTool())
-    registry.register_lazy("verify_plan_execution", lambda: VerifyPlanExecutionTool())
-    
-    return registry
+# create_default_registry is now defined in registry.py and re-exported here
+# to maintain backward compatibility for: from claude_code.tools import create_default_registry
 
 
 __all__ = [
@@ -346,7 +221,7 @@ __all__ = [
     # Control tools
     "TaskStopTool",
     "TaskOutputTool",
-    "TaskListTool",
+    "TaskControlListTool",
     # Registry
     "ToolRegistry",
     "create_default_registry",

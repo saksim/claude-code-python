@@ -146,11 +146,17 @@ def create_engine(
     if model is None:
         model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
     
-    # Build query config
+    # Load app config for permission propagation
+    app_config = get_config()
+    
+    # Build query config with permission propagation
     query_config = QueryConfig(
         model=model,
         max_tokens=8192,
         system_prompt=build_system_prompt(working_dir),
+        permission_mode=app_config.permission_mode.value if app_config.permission_mode else "default",
+        always_allow=list(app_config.always_allow),
+        always_deny=list(app_config.always_deny),
     )
     
     # Get tools from environment or use defaults
@@ -314,6 +320,18 @@ def main() -> None:
     )
     
     parser.add_argument(
+        "--mcp-serve",
+        action="store_true",
+        help="Run as MCP server (STDIO mode) for external MCP clients",
+    )
+    
+    parser.add_argument(
+        "--mcp-name",
+        default="claude-code-python",
+        help="Name of the MCP server (default: claude-code-python)",
+    )
+    
+    parser.add_argument(
         "--version",
         action="store_true",
         help="Show version",
@@ -349,6 +367,15 @@ def main() -> None:
     # Run doctor
     if args.doctor:
         asyncio.run(run_doctor())
+        return
+    
+    # Run MCP server
+    if args.mcp_serve:
+        from claude_code.mcp.server import run_mcp_server
+        asyncio.run(run_mcp_server(
+            working_directory=os.getcwd(),
+            server_name=args.mcp_name,
+        ))
         return
     
     # Initialize commands

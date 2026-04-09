@@ -17,22 +17,8 @@ from typing import Any, Callable, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-
-class PermissionMode(Enum):
-    """Permission mode for tool execution.
-    
-    Attributes:
-        DEFAULT: Ask for permission before each tool execution
-        AUTO: Auto-approve safe operations, ask for others
-        PLAN: Ask for permission for everything
-        BYPASS: No permission checks (trusted environment)
-        YOLO: No restrictions at all (testing only)
-    """
-    DEFAULT = "default"
-    AUTO = "auto"
-    PLAN = "plan"
-    BYPASS = "bypass"
-    YOLO = "yolo"
+# PermissionMode imported from canonical source
+from claude_code.permissions import PermissionMode
 
 
 class PermissionResult(Enum):

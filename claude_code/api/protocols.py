@@ -1,16 +1,20 @@
 """
 Claude Code Python - API Client Protocols
-定义 API 客户端接口，支持多后端实现.
+
+Defines API client interfaces and provider factory.
+Supports Anthropic, OpenAI-compatible (Ollama/vLLM/DeepSeek),
+AWS Bedrock, Google Vertex, and Azure OpenAI backends.
 
 Following TOP Python Dev standards:
-- Protocol 抽象接口
-- 依赖注入模式
-- 多后端支持
+- Protocol for abstract interface
+- Dependency injection pattern
+- Adapter base class for multi-backend support
 """
 
 from __future__ import annotations
 
-from typing import AsyncGenerator, Protocol, Any, Optional
+from abc import ABC, abstractmethod
+from typing import AsyncGenerator, Any, Optional
 from dataclasses import dataclass
 
 
@@ -37,109 +41,116 @@ class UsageInfo:
     total_tokens: int
 
 
-class APIClientProtocol(Protocol):
-    """API 客户端协议 (Protocol).
+class BaseLLMAdapter(ABC):
+    """Base class for LLM provider adapters.
     
-    定义 API 客户端必须实现的接口，支持:
-    - Anthropic API
-    - OpenAI 兼容 API (Ollama, vLLM, etc.)
-    - 自定义 LLM 后端
+    All provider-specific adapters must inherit from this class
+    and implement the abstract methods. This ensures a consistent
+    interface regardless of the underlying LLM provider.
+    
+    Subclasses:
+        - AnthropicAdapter (built-in, in api/client.py)
+        - OpenAIAdapter (requires `openai` package)
+        - BedrockAdapter (requires `boto3` package)
+        - VertexAdapter (requires `google-auth` package)
+        - AzureAdapter (requires `openai` package)
     
     Example:
-        >>> # 使用 Protocol 进行依赖注入
-        >>> class QueryEngine:
-        ...     def __init__(self, api_client: APIClientProtocol):
-        ...         self._client = api_client
-        ...
-        >>> # 支持多种实现
-        >>> engine = QueryEngine(AnthropicAPIClient(...))
-        >>> engine = QueryEngine(OpenAIAPIClient(...))
-        >>> engine = QueryEngine(LocalLLMClient(...))
+        >>> class MyAdapter(BaseLLMAdapter):
+        ...     async def chat(self, messages, **kwargs):
+        ...         ...
+        ...     async def chat_once(self, messages, **kwargs):
+        ...         ...
+        ...     async def close(self):
+        ...         ...
     """
     
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: str = "claude-sonnet-4-20250514",
+        **kwargs,
+    ) -> None:
+        self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
+        self._extra_config = kwargs
+    
     @property
+    @abstractmethod
     def provider(self) -> str:
-        """返回 API 提供商名称."""
+        """Return the provider name (e.g., 'anthropic', 'openai')."""
         ...
     
+    @abstractmethod
     async def chat(
         self,
         messages: list[ChatMessage],
-        model: str,
+        model: Optional[str] = None,
         tools: Optional[list[ToolDefinition]] = None,
         max_tokens: int = 8192,
         temperature: Optional[float] = None,
         system: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
-        """发送聊天请求 (流式).
+        """Send a streaming chat request.
         
         Args:
-            messages: 消息列表
-            model: 模型名称
-            tools: 工具定义列表
-            max_tokens: 最大 token 数
-            temperature: 温度参数
-            system: 系统提示
+            messages: Conversation messages
+            model: Model name override
+            tools: Tool definitions
+            max_tokens: Maximum output tokens
+            temperature: Sampling temperature
+            system: System prompt
             
         Yields:
-            流式响应内容片段
+            Streaming response chunks
         """
         ...
     
+    @abstractmethod
     async def chat_once(
         self,
         messages: list[ChatMessage],
-        model: str,
+        model: Optional[str] = None,
         tools: Optional[list[ToolDefinition]] = None,
         max_tokens: int = 8192,
         temperature: Optional[float] = None,
         system: Optional[str] = None,
     ) -> tuple[str, UsageInfo]:
-        """发送聊天请求 (非流式).
+        """Send a non-streaming chat request.
         
         Args:
-            messages: 消息列表
-            model: 模型名称
-            tools: 工具定义列表
-            max_tokens: 最大 token 数
-            temperature: 温度参数
-            system: 系统提示
+            messages: Conversation messages
+            model: Model name override
+            tools: Tool definitions
+            max_tokens: Maximum output tokens
+            temperature: Sampling temperature
+            system: System prompt
             
         Returns:
-            (响应内容, 使用量信息)
+            Tuple of (response_content, usage_info)
         """
         ...
     
     async def close(self) -> None:
-        """关闭客户端连接."""
-        ...
+        """Close the client connection. Override if cleanup needed."""
+        pass
 
 
 class LLMClientFactory:
-    """LLM 客户端工厂.
+    """LLM client factory.
     
-    根据配置创建合适的 API 客户端.
+    Creates the appropriate API client based on provider configuration.
+    Supports graceful degradation when optional packages are missing.
     
     Example:
         >>> factory = LLMClientFactory()
-        >>> client = factory.create(
-        ...     provider="anthropic",
-        ...     api_key="sk-..."
-        ... )
-        >>> # 或创建 OpenAI 兼容客户端
-        >>> client = factory.create(
-        ...     provider="openai",
-        ...     base_url="http://localhost:11434"
-        ... )
+        >>> # Anthropic (always available)
+        >>> client = factory.create(provider="anthropic", api_key="sk-...")
+        >>> # OpenAI-compatible (requires openai package)
+        >>> client = factory.create(provider="openai", base_url="http://localhost:11434")
     """
-    
-    PROVIDERS = {
-        "anthropic": "claude_code.api.anthropic_client",
-        "openai": "claude_code.api.openai_client",
-        "azure": "claude_code.api.azure_client",
-        "bedrock": "claude_code.api.bedrock_client",
-        "vertex": "claude_code.api.vertex_client",
-    }
     
     @classmethod
     def create(
@@ -149,22 +160,26 @@ class LLMClientFactory:
         base_url: Optional[str] = None,
         model: str = "claude-sonnet-4-20250514",
         **kwargs,
-    ) -> APIClientProtocol:
-        """创建 API 客户端实例.
+    ) -> BaseLLMAdapter:
+        """Create an API client instance.
         
         Args:
-            provider: 提供商名称 (anthropic, openai, azure, etc.)
-            api_key: API 密钥
-            base_url: 基础 URL (用于 OpenAI 兼容 API)
-            model: 默认模型
-            **kwargs: 其他提供商特定配置
+            provider: Provider name (anthropic, openai, ollama, vllm, deepseek, bedrock, vertex, azure)
+            api_key: API key
+            base_url: Base URL (for OpenAI-compatible APIs)
+            model: Default model
+            **kwargs: Additional provider-specific configuration
             
         Returns:
-            APIClientProtocol 实现实例
+            BaseLLMAdapter instance
+            
+        Raises:
+            ValueError: Unknown provider
+            ImportError: Required package not installed
         """
-        provider = provider.lower()
+        provider_lower = provider.lower()
         
-        if provider == "anthropic":
+        if provider_lower == "anthropic":
             from claude_code.api.client import APIClient, APIClientConfig, APIProvider
             config = APIClientConfig(
                 api_key=api_key,
@@ -173,47 +188,77 @@ class LLMClientFactory:
             )
             return APIClient(config)
         
-        elif provider == "openai" or provider == "ollama" or provider == "vllm":
-            # 尝试导入 OpenAI 兼容客户端
+        elif provider_lower in ("openai", "ollama", "vllm", "deepseek"):
+            default_urls = {
+                "ollama": "http://localhost:11434/v1",
+                "vllm": "http://localhost:8000/v1",
+                "deepseek": "https://api.deepseek.com/v1",
+            }
+            resolved_url = base_url or default_urls.get(provider_lower, base_url)
             try:
-                from claude_code.api.openai_client import OpenAIClient
-                return OpenAIClient(
+                from claude_code.api.openai_adapter import OpenAIAdapter
+                return OpenAIAdapter(
                     api_key=api_key or "dummy",
-                    base_url=base_url or "http://localhost:11434",
+                    base_url=resolved_url or base_url,
                     model=model,
                 )
             except ImportError:
                 raise ImportError(
-                    f"OpenAI-compatible client not available. "
+                    f"OpenAI-compatible provider '{provider}' requires the 'openai' package. "
                     f"Install with: pip install openai"
                 )
         
-        elif provider == "azure":
-            from claude_code.api.client import APIClient, APIClientConfig, APIProvider
-            config = APIClientConfig(
-                api_key=api_key,
-                provider=APIProvider.AZURE,
-                base_url=base_url,
-                azure_endpoint=base_url,
-                **kwargs,
-            )
-            return APIClient(config)
+        elif provider_lower == "azure":
+            try:
+                from claude_code.api.openai_adapter import OpenAIAdapter
+                azure_endpoint = base_url or kwargs.get("azure_endpoint")
+                api_version = kwargs.get("api_version", "2024-02-15-preview")
+                return OpenAIAdapter(
+                    api_key=api_key,
+                    base_url=azure_endpoint,
+                    model=model,
+                    provider_type="azure",
+                    api_version=api_version,
+                )
+            except ImportError:
+                raise ImportError(
+                    f"Azure OpenAI provider requires the 'openai' package. "
+                    f"Install with: pip install openai"
+                )
         
-        elif provider == "bedrock":
+        elif provider_lower == "bedrock":
             from claude_code.api.client import APIClient, APIClientConfig, APIProvider
             config = APIClientConfig(
                 api_key=api_key,
                 provider=APIProvider.AWS_BEDROCK,
                 aws_region=kwargs.get("aws_region", "us-east-1"),
-                **kwargs,
+            )
+            return APIClient(config)
+        
+        elif provider_lower == "vertex":
+            from claude_code.api.client import APIClient, APIClientConfig, APIProvider
+            config = APIClientConfig(
+                api_key=api_key,
+                provider=APIProvider.GOOGLE_VERTEX,
+                vertex_project=kwargs.get("vertex_project"),
+                vertex_location=kwargs.get("vertex_location", "us-central1"),
             )
             return APIClient(config)
         
         else:
-            raise ValueError(f"Unknown provider: {provider}")
+            known_providers = ["anthropic", "openai", "ollama", "vllm", "deepseek", "bedrock", "vertex", "azure"]
+            raise ValueError(
+                f"Unknown provider: '{provider}'. "
+                f"Known providers: {', '.join(known_providers)}"
+            )
+
+
+# For backward compatibility
+APIClientProtocol = BaseLLMAdapter
 
 
 __all__ = [
+    "BaseLLMAdapter",
     "APIClientProtocol",
     "ChatMessage",
     "ToolDefinition",

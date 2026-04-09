@@ -1,3 +1,5 @@
+import warnings
+warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
 """Claude Code Python - Unified Logging System
 统一日志系统，支持结构化日志、多种输出、级别控制.
 

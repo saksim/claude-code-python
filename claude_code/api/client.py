@@ -180,11 +180,17 @@ class APIClient:
     """
     Core API client for Claude Code.
     Supports multiple providers: Anthropic, AWS Bedrock, Google Vertex, Azure.
+    
+    Features:
+    - Connection reuse via persistent client
+    - Retry with exponential backoff and jitter
+    - Streaming and non-streaming API calls
     """
     
-    def __init__(self, config: APIClientConfig):
+    def __init__(self, config: APIClientConfig, retry_config: RetryConfig | None = None):
         self.config = config
         self._client: Optional[AsyncAnthropic] = None
+        self._retry_config = retry_config or RetryConfig()
         self._setup_client()
     
     def _setup_client(self):
@@ -292,7 +298,10 @@ class APIClient:
             params["metadata"] = options.metadata
         
         try:
-            response = await self._client.messages.create(**params)
+            async def _call():
+                return await self._client.messages.create(**params)
+            
+            response = await with_retry(_call, self._retry_config)
             return response
         except Exception as e:
             raise self._handle_error(e)
@@ -354,14 +363,12 @@ class APIClient:
             yield StreamEvent(type="error", error=str(e))
     
     def _format_messages(self, messages: list[MessageParam]) -> list[dict]:
-        """Convert MessageParam to API format."""
-        formatted = []
-        for msg in messages:
-            if isinstance(msg.content, str):
-                formatted.append({"role": msg.role, "content": msg.content})
-            else:
-                formatted.append({"role": msg.role, "content": msg.content})
-        return formatted
+        """Convert MessageParam to API format.
+        
+        Optimized to avoid redundant isinstance check — both str
+        and list content use the same dict structure.
+        """
+        return [{"role": msg.role, "content": msg.content} for msg in messages]
     
     def _format_tool(self, tool: ToolParam) -> dict:
         """Format a tool for the API."""
@@ -391,7 +398,15 @@ class APIClient:
 
 
 class RetryConfig:
-    """Configuration for API retry behavior."""
+    """Configuration for API retry behavior.
+    
+    Attributes:
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds before first retry
+        max_delay: Maximum delay between retries
+        exponential_base: Base for exponential backoff
+        retryable_status_codes: HTTP status codes that trigger retry
+    """
     
     def __init__(
         self,
@@ -399,13 +414,33 @@ class RetryConfig:
         initial_delay: float = 1.0,
         max_delay: float = 60.0,
         exponential_base: float = 2.0,
-        retryable_status_codes: set[int] = None,
+        jitter: bool = True,
+        retryable_status_codes: set[int] | None = None,
     ):
         self.max_retries = max_retries
         self.initial_delay = initial_delay
         self.max_delay = max_delay
         self.exponential_base = exponential_base
+        self.jitter = jitter
         self.retryable_status_codes = retryable_status_codes or {429, 500, 502, 503, 504}
+    
+    def get_delay(self, attempt: int) -> float:
+        """Calculate delay for given retry attempt with optional jitter.
+        
+        Args:
+            attempt: Zero-based retry attempt number
+            
+        Returns:
+            Delay in seconds
+        """
+        delay = min(
+            self.initial_delay * (self.exponential_base ** attempt),
+            self.max_delay,
+        )
+        if self.jitter:
+            import random
+            delay *= (0.5 + random.random())
+        return delay
 
 
 async def with_retry(
@@ -414,17 +449,16 @@ async def with_retry(
     should_retry: callable = None,
 ) -> Any:
     """
-    Execute a coroutine with retry logic.
+    Execute a coroutine with retry logic and exponential backoff.
     
     Args:
-        coro: Coroutine to execute
+        coro: Coroutine factory to execute (called repeatedly)
         config: Retry configuration
         should_retry: Optional function to determine if error is retryable
         
     Returns:
         Result of the coroutine
     """
-    delay = config.initial_delay
     last_error = None
     
     for attempt in range(config.max_retries + 1):
@@ -439,13 +473,10 @@ async def with_retry(
             if should_retry and not should_retry(e):
                 break
             
-            # Check if error is retryable
             if isinstance(e, APIClientError):
                 if e.status and e.status not in config.retryable_status_codes:
                     break
             
-            # Wait before retry with exponential backoff
-            await asyncio.sleep(min(delay, config.max_delay))
-            delay *= config.exponential_base
+            await asyncio.sleep(config.get_delay(attempt))
     
     raise last_error

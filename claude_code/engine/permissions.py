@@ -54,14 +54,8 @@ class PermissionRule:
     description: str | None = None
 
 
-class PermissionMode(Enum):
-    """Permission mode setting."""
-
-    DEFAULT = "default"  # Ask for permission
-    AUTO = "auto"  # Auto-approve based on rules
-    PLAN = "plan"  # Ask for everything
-    BYPASS = "bypass"  # No permission checks
-    YOLO = "yolo"  # Auto-approve everything
+# PermissionMode imported from canonical source
+from claude_code.permissions import PermissionMode
 
 
 @dataclass

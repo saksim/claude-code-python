@@ -33,25 +33,12 @@ DEFAULT_MAX_TOKENS: int = 8192
 DEFAULT_AZURE_API_VERSION: str = "2024-01-01"
 DEFAULT_COMPACT_THRESHOLD: int = 150000
 
-# Permission mode enum
-class PermissionMode(Enum):
-    """Permission mode for tool execution.
-    
-    Attributes:
-        DEFAULT: Ask for permission before dangerous operations
-        AUTO: Auto-approve safe operations
-        PLAN: Plan mode, ask for everything
-        BYPASS: No permission checks (dangerous)
-    """
-    DEFAULT = "default"
-    AUTO = "auto"
-    PLAN = "plan"
-    BYPASS = "bypass"
-
+# Permission mode — import from canonical source
+from claude_code.permissions import PermissionMode, PERMISSION_MODES
 
 # Constant sets using frozenset
 VALID_PROVIDERS: frozenset[str] = frozenset({"anthropic", "bedrock", "vertex", "azure"})
-VALID_PERMISSION_MODES: frozenset[str] = frozenset({"default", "auto", "plan", "bypass"})
+VALID_PERMISSION_MODES: frozenset[str] = frozenset(PERMISSION_MODES)
 SUPPORTED_AWS_REGIONS: frozenset[str] = frozenset({
     "us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1", "ap-northeast-1"
 })

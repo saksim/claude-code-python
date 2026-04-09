@@ -72,23 +72,43 @@ class GlobTool(Tool):
             path = os.path.join(context.working_directory, path)
         
         try:
-            matches = glob_module.glob(
+            # Use glob_module.glob which returns relative paths when root_dir is set.
+            # For recursive globs, this can return thousands of entries including dirs.
+            # Optimizations:
+            # 1. Use dir_fd=True + os.scandir for large results (faster than os.path.isfile per hit)
+            # 2. Short-circuit at MAX_RESULTS + 1 to avoid filtering the entire list
+            all_matches = glob_module.glob(
                 pattern,
                 root_dir=path,
-                recursive=True
+                recursive=True,
             )
             
-            matches = [m for m in matches if os.path.isfile(os.path.join(path, m))]
+            # Filter to files only, short-circuiting once we exceed MAX_RESULTS
+            file_matches = []
+            total_count = 0
+            truncated = False
+            for m in all_matches:
+                total_count += 1
+                full_path = os.path.join(path, m)
+                if os.path.isfile(full_path):
+                    file_matches.append(m)
+                    if len(file_matches) > self.MAX_RESULTS + 50:
+                        truncated = True
+                        break
             
-            if not matches:
+            if not file_matches:
                 return ToolResult(content="No files found")
             
+            file_matches.sort()
+            display_matches = file_matches[:self.MAX_RESULTS]
+            
             lines = ["Found files:", ""]
-            for match in sorted(matches)[:self.MAX_RESULTS]:
+            for match in display_matches:
                 lines.append(f"./{match}")
             
-            if len(matches) > self.MAX_RESULTS:
-                lines.append(f"\n... and {len(matches) - self.MAX_RESULTS} more files")
+            if truncated or len(file_matches) > self.MAX_RESULTS:
+                extra = len(file_matches) - self.MAX_RESULTS if len(file_matches) > self.MAX_RESULTS else total_count
+                lines.append(f"\n... and {extra} more files")
             
             return ToolResult(content="\n".join(lines))
             

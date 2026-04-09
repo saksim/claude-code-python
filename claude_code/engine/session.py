@@ -21,7 +21,7 @@ DEFAULT_STORAGE_DIR = Path.home() / ".claude-code-python" / "sessions"
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class SessionMetadata:
     """Metadata for a session.
 

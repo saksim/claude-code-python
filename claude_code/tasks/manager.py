@@ -36,7 +36,10 @@ class TaskManager:
     Manages task execution and tracking.
     
     Handles creating, running, and monitoring tasks.
+    Supports singleton pattern via get_instance().
     """
+    
+    _instance: Optional['TaskManager'] = None
     
     def __init__(self):
         self._tasks: dict[str, Task] = {}
@@ -45,6 +48,13 @@ class TaskManager:
         self._event_handlers: list[Callable[[TaskEvent], None]] = []
         self._running_tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+    
+    @classmethod
+    def get_instance(cls) -> 'TaskManager':
+        """Get the global task manager instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
     
     async def create_bash_task(
         self,
@@ -288,24 +298,6 @@ class TaskManager:
             del self._tasks[task_id]
         
         return len(completed)
-
-
-# Global task manager
-_task_manager: Optional[TaskManager] = None
-
-
-class TaskManager:
-    """
-    Global task manager singleton.
-    """
-    _instance: Optional['TaskManager'] = None
-    
-    @classmethod
-    def get_instance(cls) -> 'TaskManager':
-        """Get the global task manager instance."""
-        if cls._instance is None:
-            cls._instance = TaskManager()
-        return cls._instance
 
 
 def get_task_manager() -> TaskManager:

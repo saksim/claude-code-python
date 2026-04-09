@@ -11,9 +11,9 @@ from claude_code.services.mcp.client import (
 from claude_code.mcp.server import (
     MCPServer,
     MCPServerConfig,
-    MCPToolDefinition,
-    MCPResourceDefinition,
-    FileSystemMCPServer,
+    MCPProtocolHandler,
+    create_mcp_server,
+    run_mcp_server,
 )
 
 __all__ = [
@@ -37,7 +37,7 @@ __all__ = [
     # Server
     "MCPServer",
     "MCPServerConfig",
-    "MCPToolDefinition",
-    "MCPResourceDefinition",
-    "FileSystemMCPServer",
+    "MCPProtocolHandler",
+    "create_mcp_server",
+    "run_mcp_server",
 ]

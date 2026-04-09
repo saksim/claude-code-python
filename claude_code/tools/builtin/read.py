@@ -18,9 +18,44 @@ from typing import Any, Optional
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
 
 
+def _stream_lines(path: Path, offset: int, limit: Optional[int]) -> list[str]:
+    """Stream lines from a large file without loading it all into memory.
+    
+    Reads only the needed range, using an iterator to avoid
+    buffering the entire file.
+    
+    Args:
+        path: File path to read
+        offset: 1-indexed starting line number
+        limit: Maximum number of lines to read (None = read to end)
+        
+    Returns:
+        List of line strings (including newlines)
+    """
+    start_idx = max(0, offset - 1)
+    result = []
+    current = 0
+    count = 0
+    
+    with open(path, 'r', encoding=DEFAULT_FILE_ENCODING, errors='replace') as f:
+        for line in f:
+            if current < start_idx:
+                current += 1
+                continue
+            result.append(line)
+            count += 1
+            if limit is not None and count >= limit:
+                break
+            current += 1
+    
+    return result
+
+
 # Default constants
 DEFAULT_OFFSET: int = 1
 DEFAULT_FILE_ENCODING: str = "utf-8"
+# For files larger than this, use streaming instead of readlines()
+_STREAM_THRESHOLD: int = 4 * 1024 * 1024  # 4MB
 
 
 class ReadTool(Tool):
@@ -121,14 +156,24 @@ class ReadTool(Tool):
             )
         
         try:
-            with open(path, 'r', encoding=DEFAULT_FILE_ENCODING, errors='replace') as f:
-                lines = f.readlines()
+            file_size = path.stat().st_size
             
-            # Calculate slice indices (convert from 1-indexed to 0-indexed)
-            start_idx = max(0, offset - 1)
-            end_idx = len(lines) if limit is None else start_idx + limit
-            
-            content = "".join(lines[start_idx:end_idx])
+            # For large files, use streaming to avoid loading entire file into memory
+            if file_size > _STREAM_THRESHOLD and limit is not None:
+                lines_iter = _stream_lines(path, offset, limit)
+                content = "".join(lines_iter)
+            elif file_size > _STREAM_THRESHOLD:
+                # Large file with no limit — stream from offset only
+                lines_iter = _stream_lines(path, offset, None)
+                content = "".join(lines_iter)
+            else:
+                # Small file — readlines is fine and faster
+                with open(path, 'r', encoding=DEFAULT_FILE_ENCODING, errors='replace') as f:
+                    lines = f.readlines()
+                
+                start_idx = max(0, offset - 1)
+                end_idx = len(lines) if limit is None else start_idx + limit
+                content = "".join(lines[start_idx:end_idx])
             
             return ToolResult(content=content)
             

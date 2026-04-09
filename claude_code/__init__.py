@@ -4,7 +4,8 @@ Claude Code Python - Package initialization
 
 from claude_code.api.client import APIClient, APIClientConfig, APIProvider
 from claude_code.engine.query import QueryEngine, QueryConfig, Message, ToolUse
-from claude_code.engine.context import ContextBuilder, GitInfo, ClaudeMdLoader, PermissionMode
+from claude_code.engine.context import ContextBuilder, GitInfo, ClaudeMdLoader
+from claude_code.permissions import PermissionMode
 from claude_code.engine.session import Session, SessionManager, SessionStore
 from claude_code.tools.registry import create_default_registry, ToolRegistry
 from claude_code.repl import REPL, REPLConfig, PipeMode

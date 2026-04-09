@@ -423,13 +423,8 @@ class ContextBuilder:
         self._current_date_cache_day = None
 
 
-class PermissionMode(Enum):
-    """Permission mode for tool execution."""
-
-    DEFAULT = "default"  # Ask for permission
-    AUTO = "auto"  # Auto-approve safe operations
-    PLAN = "plan"  # Plan mode, ask for everything
-    BYPASS = "bypass"  # No permission checks
+# PermissionMode is imported from claude_code.permissions — canonical source
+from claude_code.permissions import PermissionMode
 
 
 @dataclass

@@ -645,7 +645,11 @@ api_key = config.api.api_key
 
 ## MCP (Model Context Protocol)
 
-Claude Code Python 支持 MCP 协议，可以连接外部服务：
+Claude Code Python 支持完整的 MCP 协议，包括客户端和服务器功能。
+
+### MCP 客户端
+
+连接外部 MCP 服务器：
 
 ```python
 from claude_code.services.mcp.client import MCPClient
@@ -654,6 +658,43 @@ client = MCPClient(config)
 await client.connect("server-name")
 tools = await client.list_tools()
 ```
+
+### MCP 服务器
+
+将 Claude Code Python 作为 MCP 服务器暴露给外部客户端（Cursor、Cline、Zed 等）：
+
+```bash
+# 启动 MCP 服务器 (STDIO 模式)
+python -m claude_code.main --mcp-serve
+
+# 指定服务器名称
+python -m claude_code.main --mcp-serve --mcp-name "my-cc-server"
+```
+
+### MCP 服务器配置
+
+在 Cursor/Cline/Zed 的 `mcp.json` 中配置：
+
+```json
+{
+  "mcpServers": {
+    "claude-code-python": {
+      "command": "python",
+      "args": ["-m", "claude_code.main", "--mcp-serve"],
+      "env": {
+        "PYTHONPATH": "/path/to/claude-code-python"
+      }
+    }
+  }
+}
+```
+
+### MCP 服务器功能
+
+- **68+ 内置工具**：BashTool、ReadTool、WriteTool、EditTool、GrepTool 等
+- **完整工具执行**：通过 MCP 协议调用任何工具
+- **资源访问**：server://info、server://tools 等资源
+- **提示模板**：tool_list、tool_info 等内置提示
 
 ### MCP 配置
 
