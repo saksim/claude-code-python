@@ -195,6 +195,10 @@ class QueryEngine:
         self.total_output_tokens = 0
         self.total_cost = 0.0
         
+        # Cache for tool definitions and API params
+        self._cached_config_hash: Optional[int] = None
+        self._cached_tools: list[ToolParam] = []
+        
         # Stream handling
         self._stream_task: Optional[asyncio.Task] = None
         self._streaming = False
@@ -294,18 +298,47 @@ class QueryEngine:
                     break
                 
                 # Execute tool calls
-                for tool_use in tool_uses:
+                if len(tool_uses) == 1:
+                    # Single tool — no need for gather overhead
+                    tool_use = tool_uses[0]
                     yield tool_use
-                    
-                    # Execute tool
                     result = await self._execute_tool(tool_use)
                     self.tool_results.append(result)
                     yield result
-                    
-                    # Add tool result as user message
                     tool_result_message = self._create_tool_result_message(result)
                     self.messages.append(tool_result_message)
                     api_messages.append(tool_result_message.to_param())
+                else:
+                    # Multiple tools — execute in parallel when safe
+                    safe_tool_names = set()
+                    for tu in tool_uses:
+                        tool = self.tool_registry.get(tu.name)
+                        if tool and tool.is_concurrency_safe():
+                            safe_tool_names.add(tu.name)
+                    
+                    if all(tu.name in safe_tool_names for tu in tool_uses):
+                        # All tools are concurrency-safe — execute in parallel
+                        for tu in tool_uses:
+                            yield tu
+                        results = await asyncio.gather(
+                            *[self._execute_tool(tu) for tu in tool_uses]
+                        )
+                        for tu, result in zip(tool_uses, results):
+                            self.tool_results.append(result)
+                            yield result
+                            tool_result_message = self._create_tool_result_message(result)
+                            self.messages.append(tool_result_message)
+                            api_messages.append(tool_result_message.to_param())
+                    else:
+                        # Mixed or unsafe tools — execute sequentially
+                        for tool_use in tool_uses:
+                            yield tool_use
+                            result = await self._execute_tool(tool_use)
+                            self.tool_results.append(result)
+                            yield result
+                            tool_result_message = self._create_tool_result_message(result)
+                            self.messages.append(tool_result_message)
+                            api_messages.append(tool_result_message.to_param())
                 
             except Exception as e:
                 yield {"type": "error", "error": str(e)}
@@ -414,7 +447,16 @@ class QueryEngine:
         return tool_uses
     
     def _build_tools(self) -> list[ToolParam]:
-        """Build tool parameters for API."""
+        """Build tool parameters for API.
+        
+        Caches the result when tool list hasn't changed,
+        avoiding redundant ToolDefinition → ToolParam conversion
+        on every conversation turn.
+        """
+        config_hash = hash(tuple(t.name for t in self.config.tools))
+        if config_hash == self._cached_config_hash and self._cached_tools:
+            return self._cached_tools
+        
         tools = []
         for tool in self.config.tools:
             definition = tool.get_definition()
@@ -423,6 +465,8 @@ class QueryEngine:
                 description=definition.description,
                 input_schema=definition.input_schema,
             ))
+        self._cached_config_hash = config_hash
+        self._cached_tools = tools
         return tools
     
     async def _execute_tool(self, tool_use: ToolUse) -> ToolCallResult:

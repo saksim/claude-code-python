@@ -82,7 +82,7 @@ ToolCallback = Callable[[ToolProgress], Awaitable[None]]
 class ToolDefinition:
     """Definition of a tool for the API.
     
-    Using frozen dataclass with slots for immutability and memory efficiency.
+    Using frozen=True, slots=True for immutability and memory efficiency.
     """
     name: str
     description: str
@@ -99,8 +99,13 @@ class ToolDefinition:
     requires_user_interaction: bool = False
 
 
+# Pre-computed frozensets for permission checks — avoids recreating on every call
+_PLAN_ALLOWED_TOOLS: frozenset[str] = frozenset({
+    "read", "glob", "grep", "web_search", "web_fetch",
+})
+
+
 @dataclass
-class ToolContext:
     """Context available during tool execution.
     
     Following Python best practices:
@@ -119,6 +124,10 @@ class ToolContext:
     always_deny: list[str] = field(default_factory=list)
     model: Optional[str] = None
     session_id: Optional[str] = None
+    
+    # Cached permission sets (populated on first check)
+    _allow_set: Optional[frozenset] = field(default=None, repr=False)
+    _deny_set: Optional[frozenset] = field(default=None, repr=False)
     
     def get_env(self, key: str, default: str = "") -> str:
         """Get environment variable.
@@ -140,8 +149,22 @@ class ToolContext:
         """
         return self.abort_signal is not None and self.abort_signal.is_set()
     
+    def _ensure_permission_cache(self):
+        """Lazily build frozenset caches for O(1) permission checks.
+        
+        Avoids converting list → frozenset on every is_tool_allowed() call.
+        Called once on first permission check, then reused.
+        """
+        if self._allow_set is None:
+            self._allow_set = frozenset(self.always_allow)
+        if self._deny_set is None:
+            self._deny_set = frozenset(self.always_deny)
+    
     def is_tool_allowed(self, tool_name: str) -> bool:
         """Check if a tool is allowed based on permission context.
+        
+        Uses cached frozensets for O(1) membership tests instead
+        of O(n) list scans.
         
         Args:
             tool_name: Name of the tool to check.
@@ -149,14 +172,19 @@ class ToolContext:
         Returns:
             True if the tool is allowed.
         """
-        if tool_name in self.always_deny:
+        self._ensure_permission_cache()
+        
+        # O(1) deny check
+        if tool_name in self._deny_set:
             return False
-        if tool_name in self.always_allow:
+        # O(1) allow check
+        if tool_name in self._allow_set:
             return True
+        # Permission mode gating
         if self.permission_mode == "yolo":
             return True
         if self.permission_mode == "plan":
-            return tool_name in ("read", "glob", "grep", "web_search", "web_fetch")
+            return tool_name in _PLAN_ALLOWED_TOOLS
         return True
 
 

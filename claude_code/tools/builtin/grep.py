@@ -9,8 +9,23 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Optional
+from functools import lru_cache
 
 from claude_code.tools.base import Tool, ToolCallback, ToolContext, ToolResult
+
+
+@lru_cache(maxsize=64)
+def _compile_pattern(pattern: str, flags: int) -> re.Pattern:
+    """Cache compiled regex patterns to avoid recompilation.
+    
+    Args:
+        pattern: Regex pattern string
+        flags: Regex flags
+        
+    Returns:
+        Compiled regex Pattern object
+    """
+    return re.compile(pattern, flags)
 
 
 class GrepTool(Tool):
@@ -18,10 +33,12 @@ class GrepTool(Tool):
     
     This tool performs regex-based search across files in a directory.
     It supports case sensitivity control and file filtering by pattern.
+    Uses cached regex compilation for repeated pattern searches.
     """
     
     MAX_MATCHES = 100
     MAX_DISPLAY = 50
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # Skip files larger than 10MB
     
     @property
     def name(self) -> str:
@@ -89,7 +106,7 @@ class GrepTool(Tool):
         
         try:
             flags = 0 if case_sensitive else re.IGNORECASE
-            regex = re.compile(pattern, flags)
+            regex = _compile_pattern(pattern, flags)
         except re.error as e:
             return ToolResult(content=f"Invalid regex: {e}", is_error=True)
         
@@ -99,8 +116,10 @@ class GrepTool(Tool):
         matches: list[str] = []
         files_searched = 0
         
+        _SKIP_DIRS = frozenset({'.git', 'node_modules', '__pycache__', '.svn', '.hg', 'vendor', 'venv', '.venv', 'dist', 'build'})
+        
         for root, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('node_modules', '__pycache__')]
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
             
             for file in files:
                 if include and not file.endswith(include.replace('*', '')):
@@ -108,6 +127,13 @@ class GrepTool(Tool):
                 
                 files_searched += 1
                 file_path = os.path.join(root, file)
+                
+                # Skip files that are too large
+                try:
+                    if os.path.getsize(file_path) > self.MAX_FILE_SIZE:
+                        continue
+                except OSError:
+                    continue
                 
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='replace') as f:

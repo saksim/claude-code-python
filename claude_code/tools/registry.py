@@ -84,28 +84,34 @@ class ToolRegistry:
     def get(self, name: str) -> Optional[Tool]:
         """Get a tool by name or alias.
         
+        Optimized lookup order:
+        1. Direct name in _tools (O(1) dict lookup)
+        2. Alias resolution (O(1) dict lookup)
+        3. Lazy factory resolution (O(1) dict lookup)
+        
         Args:
             name: Tool name or alias
             
         Returns:
             Tool instance or None if not found
         """
-        # Direct lookup in tools
-        if name in self._tools:
-            tool = self._tools[name]
-            if tool is not None:
-                return tool
-            # Lazy load if needed
-            return self._resolve_tool(name)
+        # Direct lookup — most common case
+        tool = self._tools.get(name)
+        if tool is not None:
+            return tool
+        
+        # Check if it's a lazy placeholder that needs resolution
+        if name in self._lazy_factories:
+            resolved = self._lazy_factories.pop(name)
+            tool = resolved()
+            self._tools[name] = tool
+            return tool
         
         # Check aliases
-        if name in self._aliases:
-            real_name = self._aliases[name]
-            return self._resolve_tool(real_name)
-        
-        # Try lazy resolution
-        if name in self._lazy_factories:
-            return self._resolve_tool(name)
+        real_name = self._aliases.get(name)
+        if real_name is not None:
+            # Alias resolution — recurse with real name
+            return self.get(real_name)
         
         return None
     
@@ -127,12 +133,14 @@ class ToolRegistry:
     def get_definitions(self) -> list[dict[str, Any]]:
         """Get all tool definitions for API.
         
-        Returns:
-            List of tool definition dictionaries
+        Optimized to avoid preloading all tools.
+        Only resolves tools that have already been accessed.
         """
-        # Resolve all lazy tools first
-        self.preload()
-        return [tool.get_definition().__dict__ for tool in self._tools.values() if tool is not None]
+        return [
+            tool.get_definition().__dict__
+            for tool in self._tools.values()
+            if tool is not None
+        ]
     
     def get_names(self) -> list[str]:
         """Get all tool names.

@@ -23,6 +23,23 @@ from claude_code.agents.builtin import (
     setup_builtin_agents,
 )
 
+# Module-level reusable default API config (avoid repeated object creation)
+_DEFAULT_API_CONFIG = None
+
+
+def _get_default_api_config():
+    """Get or create a cached default API config for agent spawns.
+    
+    Reuses the same config object across agent calls to avoid
+    repeated object creation. The Anthropic SDK handles actual
+    connection pooling internally.
+    """
+    global _DEFAULT_API_CONFIG
+    if _DEFAULT_API_CONFIG is None:
+        from claude_code.api.client import APIClientConfig
+        _DEFAULT_API_CONFIG = APIClientConfig()
+    return _DEFAULT_API_CONFIG
+
 
 def _build_agent_registry() -> dict[str, AgentDefinition]:
     """Build the complete agent registry from builtin agents.
@@ -216,7 +233,7 @@ class AgentTool(Tool):
                 cwd = worktree_path
         
         try:
-            api_config = APIClientConfig()
+            api_config = _get_default_api_config()
             api_client = APIClient(api_config)
             
             system_prompt = f"""{agent_def.prompt}
@@ -287,9 +304,9 @@ Report your findings and results clearly."""
         
         async def _execute_agent(task):
             from claude_code.engine.query import QueryEngine, Message
-            from claude_code.api.client import APIClient, APIClientConfig
+            from claude_code.api.client import APIClient
             
-            api_config = APIClientConfig()
+            api_config = _get_default_api_config()
             api_client = APIClient(api_config)
             engine = QueryEngine(api_client=api_client)
             engine.config.system_prompt = agent_def.prompt
