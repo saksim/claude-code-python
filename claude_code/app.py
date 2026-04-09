@@ -1,15 +1,16 @@
 """Claude Code Python - Complete Application Framework.
 
 Provides unified application lifecycle management integrating all components.
+Following TOP Python Dev standards with proper type hints and __slots__.
 """
 
 import asyncio
 import signal
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable
 
 # Import DI container
 from claude_code.di.container import (
@@ -72,7 +73,9 @@ class AppPhase(Enum):
 @dataclass
 class AppConfig:
     """Main application configuration.
-
+    
+    Uses __slots__ for memory optimization.
+    
     Attributes:
         service_name: Name of the service.
         version: Application version.
@@ -82,14 +85,35 @@ class AppConfig:
         enable_tracing: Enable distributed tracing.
         enable_health_check: Enable health check endpoint.
     """
-
-    service_name: str = "claude-code"
-    version: str = "1.0.0"
-    config_dir: Optional[Path] = None
-    log_level: str = "INFO"
-    enable_telemetry: bool = True
-    enable_tracing: bool = True
-    enable_health_check: bool = True
+    
+    __slots__ = ('service_name', 'version', 'config_dir', 'log_level', 'enable_telemetry', 'enable_tracing', 'enable_health_check')
+    
+    service_name: str
+    version: str
+    config_dir: Path | None
+    log_level: str
+    enable_telemetry: bool
+    enable_tracing: bool
+    enable_health_check: bool
+    
+    def __init__(
+        self,
+        service_name: str = "claude-code",
+        version: str = "1.0.0",
+        config_dir: Path | None = None,
+        log_level: str = "INFO",
+        enable_telemetry: bool = True,
+        enable_tracing: bool = True,
+        enable_health_check: bool = True,
+    ) -> None:
+        """Initialize app config."""
+        self.service_name = service_name
+        self.version = version
+        self.config_dir = config_dir
+        self.log_level = log_level
+        self.enable_telemetry = enable_telemetry
+        self.enable_tracing = enable_tracing
+        self.enable_health_check = enable_health_check
 
 
 class Application:
@@ -102,6 +126,8 @@ class Application:
     - Health Checks
     - Graceful Shutdown
     - Service Lifecycle
+    
+    Uses __slots__ for memory optimization.
 
     Usage:
         async with Application(config) as app:
@@ -112,8 +138,10 @@ class Application:
 
             await app.run()
     """
-
-    def __init__(self, config: Optional[AppConfig] = None) -> None:
+    
+    __slots__ = ('config', '_phase', '_services', '_logger', '_container', '_config_manager', '_tracer', '_shutdown_manager', '_running')
+    
+    def __init__(self, config: AppConfig | None = None) -> None:
         """Initialize the application.
 
         Args:
@@ -121,14 +149,14 @@ class Application:
         """
         self.config = config or AppConfig()
         self._phase = AppPhase.INITIALIZING
-        self._services: Dict[str, Any] = {}
+        self._services: dict[str, Any] = {}
         self._logger = get_logger(self.config.service_name)
         
         # Core components (lazy initialized)
-        self._container: Optional[ServiceContainer] = None
-        self._config_manager: Optional[ConfigManager] = None
-        self._tracer: Optional[Tracer] = None
-        self._shutdown_manager: Optional[ShutdownManager] = None
+        self._container: ServiceContainer | None = None
+        self._config_manager: ConfigManager | None = None
+        self._tracer: Tracer | None = None
+        self._shutdown_manager: ShutdownManager | None = None
         
         # State
         self._running = False

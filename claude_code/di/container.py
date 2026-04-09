@@ -1,11 +1,12 @@
 """Dependency Injection Container for Claude Code Python.
 
 Provides service locator pattern with lazy initialization and lifecycle management.
+Following TOP Python Dev standards with __slots__ for memory optimization.
 """
 
 import asyncio
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
+from typing import Any, Callable, Type, TypeVar
 
 T = TypeVar("T")
 
@@ -29,13 +30,18 @@ class ServiceLifecycle(Enum):
 
 
 class ServiceDescriptor:
-    """Describes a registered service."""
-
+    """Describes a registered service.
+    
+    Uses __slots__ for memory optimization.
+    """
+    
+    __slots__ = ('service_type', 'factory', 'instance', 'lifecycle')
+    
     def __init__(
         self,
         service_type: Type,
-        factory: Optional[Callable[..., Any]] = None,
-        instance: Optional[Any] = None,
+        factory: Callable[..., Any] | None = None,
+        instance: Any | None = None,
         lifecycle: ServiceLifecycle = ServiceLifecycle.SINGLETON,
     ) -> None:
         self.service_type = service_type
@@ -52,6 +58,7 @@ class ServiceContainer:
     - Lazy factory resolution
     - Circular dependency detection
     - Async service support
+    - __slots__ for memory optimization
 
     Usage:
         container = ServiceContainer()
@@ -60,17 +67,19 @@ class ServiceContainer:
 
         limiter = container.get(RateLimiter)
     """
-
+    
+    __slots__ = ('_services', '_lock')
+    
     def __init__(self) -> None:
         """Initialize the service container."""
-        self._services: Dict[str, ServiceDescriptor] = {}
+        self._services: dict[str, ServiceDescriptor] = {}
         self._lock = asyncio.Lock()
 
     def register(
         self,
         service_type: Type[T],
-        factory: Optional[Callable[..., T]] = None,
-        instance: Optional[T] = None,
+        factory: Callable[..., T] | None = None,
+        instance: T | None = None,
         lifecycle: ServiceLifecycle = ServiceLifecycle.SINGLETON,
     ) -> "ServiceContainer":
         """Register a service in the container.
@@ -90,7 +99,7 @@ class ServiceContainer:
         key = self._get_key(service_type)
         if key in self._services:
             raise ServiceAlreadyRegisteredError(
-                "Service {} is already registered".format(service_type.__name__)
+                f"Service {service_type.__name__} is already registered"
             )
 
         self._services[key] = ServiceDescriptor(
@@ -155,13 +164,13 @@ class ServiceContainer:
         key = self._get_key(service_type)
         if key not in self._services:
             raise ServiceNotFoundError(
-                "Service {} is not registered".format(service_type.__name__)
+                f"Service {service_type.__name__} is not registered"
             )
 
         descriptor = self._services[key]
         return self._resolve(descriptor)
 
-    def get_or_none(self, service_type: Type[T]) -> Optional[T]:
+    def get_or_none(self, service_type: Type[T]) -> T | None:
         """Get a service or return None if not registered.
 
         Args:
@@ -190,7 +199,7 @@ class ServiceContainer:
         key = self._get_key(service_type)
         if key not in self._services:
             raise ServiceNotFoundError(
-                "Service {} is not registered".format(service_type.__name__)
+                f"Service {service_type.__name__} is not registered"
             )
 
         descriptor = self._services[key]
@@ -272,7 +281,7 @@ class ServiceContainer:
         """
         return self._get_key(service_type) in self._services
 
-    def list_services(self) -> List[type]:
+    def list_services(self) -> list[type]:
         """List all registered service types.
 
         Returns:
@@ -282,7 +291,7 @@ class ServiceContainer:
 
 
 # Global container
-_container: Optional[ServiceContainer] = None
+_container: ServiceContainer | None = None
 
 
 def get_container() -> ServiceContainer:
@@ -335,3 +344,16 @@ def injectable(
         cls._lifecycle = lifecycle  # type: ignore
         return cls
     return decorator
+
+
+__all__ = [
+    "ServiceAlreadyRegisteredError",
+    "ServiceNotFoundError",
+    "ServiceLifecycle",
+    "ServiceDescriptor",
+    "ServiceContainer",
+    "injectable",
+    "get_container",
+    "set_container",
+    "reset_container",
+]
