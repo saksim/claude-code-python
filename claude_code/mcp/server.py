@@ -1,6 +1,7 @@
 """
 Claude Code Python - MCP Server
 Server-side implementation of the Model Context Protocol.
+Fully integrated with the existing tool system.
 
 Following TOP Python Dev standards:
 - Clear type hints
@@ -15,29 +16,13 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Any, Optional, Callable
+from typing import Any, Optional
 from dataclasses import dataclass, field
-from enum import Enum
 
 
 # Module-level constants
 DEFAULT_SERVER_VERSION: str = "1.0.0"
-DEFAULT_PORT: int = 8080
-DEFAULT_HOST: str = "127.0.0.1"
 PROTOCOL_VERSION: str = "2024-11-05"
-
-
-class MCPTransport(Enum):
-    """MCP transport types.
-    
-    Attributes:
-        STDIO: Standard input/output transport
-        SSE: Server-Sent Events transport
-        WEBSOCKET: WebSocket transport
-    """
-    STDIO = "stdio"
-    SSE = "sse"
-    WEBSOCKET = "websocket"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,49 +34,11 @@ class MCPServerConfig:
     Attributes:
         name: Server name
         version: Server version
-        transport: Transport type
-        port: Port number for network transports
-        host: Host address for network transports
+        working_directory: Working directory for tool execution
     """
     name: str
     version: str = DEFAULT_SERVER_VERSION
-    transport: MCPTransport = MCPTransport.STDIO
-    port: int = DEFAULT_PORT
-    host: str = DEFAULT_HOST
-
-
-@dataclass(frozen=True, slots=True)
-class MCPToolDefinition:
-    """Tool definition for MCP server.
-    
-    Using frozen=True, slots=True for immutability.
-    
-    Attributes:
-        name: Tool name
-        description: Tool description
-        input_schema: JSON schema for tool input
-    """
-    name: str
-    description: str
-    input_schema: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class MCPResourceDefinition:
-    """Resource definition for MCP server.
-    
-    Using frozen=True, slots=True for immutability.
-    
-    Attributes:
-        uri: Resource URI
-        name: Resource name
-        description: Resource description
-        mime_type: MIME type of the resource
-    """
-    uri: str
-    name: str
-    description: str = ""
-    mime_type: str = "text/plain"
+    working_directory: str = "."
 
 
 class MCPProtocolHandler:
@@ -109,12 +56,12 @@ class MCPProtocolHandler:
     
     def __init__(self) -> None:
         """Initialize protocol handler."""
-        self._request_handlers: dict[str, Callable] = {}
-        self._notification_handlers: dict[str, Callable] = {}
+        self._request_handlers: dict[str, Any] = {}
+        self._notification_handlers: dict[str, Any] = {}
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._request_id = 0
     
-    def register_method(self, method: str, handler: Callable) -> None:
+    def register_method(self, method: str, handler: Any) -> None:
         """Register a method handler.
         
         Args:
@@ -123,7 +70,7 @@ class MCPProtocolHandler:
         """
         self._request_handlers[method] = handler
         
-    def register_notification(self, method: str, handler: Callable) -> None:
+    def register_notification(self, method: str, handler: Any) -> None:
         """Register a notification handler.
         
         Args:
@@ -217,19 +164,18 @@ class MCPProtocolHandler:
 
 
 class MCPServer:
-    """
-    MCP Server implementation.
+    """MCP Server implementation integrated with Claude Code Python tool system.
     
-    Provides tools, resources, and prompts to MCP clients.
+    Provides all registered tools, resources, and prompts to MCP clients.
+    This server can be exposed to external MCP clients (Cursor, Cline, Zed, etc.)
+    allowing them to use Claude Code Python's tools.
     """
     
     def __init__(self, config: MCPServerConfig):
         self.config = config
         self.protocol = MCPProtocolHandler()
-        self._tools: dict[str, MCPToolDefinition] = {}
-        self._resources: dict[str, MCPResourceDefinition] = {}
-        self._prompts: dict[str, dict] = {}
-        self._server = None
+        self._tool_registry = None
+        self._initialized = False
         
         self._setup_methods()
     
@@ -245,25 +191,30 @@ class MCPServer:
         
         self.protocol.register_notification("initialized", lambda p: None)
     
-    def add_tool(self, tool: MCPToolDefinition) -> None:
-        """Add a tool to the server."""
-        self._tools[tool.name] = tool
+    def set_tool_registry(self, registry: Any) -> None:
+        """Set the tool registry to expose tools via MCP.
+        
+        Args:
+            registry: ToolRegistry instance from claude_code.tools
+        """
+        self._tool_registry = registry
     
-    def add_resource(self, resource: MCPResourceDefinition) -> None:
-        """Add a resource to the server."""
-        self._resources[resource.uri] = resource
-    
-    def add_prompt(self, name: str, description: str, template: str) -> None:
-        """Add a prompt to the server."""
-        self._prompts[name] = {
-            "description": description,
-            "template": template,
-        }
+    def _convert_input_schema(self, input_schema: dict[str, Any]) -> dict[str, Any]:
+        """Convert Claude Code Python input schema to MCP format.
+        
+        Args:
+            input_schema: Original input schema
+            
+        Returns:
+            MCP-compatible input schema
+        """
+        return input_schema
     
     async def _handle_initialize(self, params: dict) -> dict:
         """Handle initialize request."""
+        self._initialized = True
         return {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {
                 "tools": {"listChanged": True},
                 "resources": {"listChanged": True},
@@ -276,45 +227,82 @@ class MCPServer:
         }
     
     async def _handle_list_tools(self, params: dict) -> dict:
-        """Handle tools/list request."""
-        return {
-            "tools": [
-                {
-                    "name": t.name,
-                    "description": t.description,
-                    "inputSchema": t.input_schema,
-                }
-                for t in self._tools.values()
-            ]
-        }
+        """Handle tools/list request.
+        
+        Returns all tools from the tool registry in MCP format.
+        """
+        if self._tool_registry is None:
+            return {"tools": []}
+        
+        tools = []
+        for tool in self._tool_registry.list_all():
+            definition = tool.get_definition()
+            tools.append({
+                "name": definition.name,
+                "description": definition.description,
+                "inputSchema": self._convert_input_schema(definition.input_schema),
+            })
+        
+        return {"tools": tools}
     
     async def _handle_call_tool(self, params: dict) -> dict:
-        """Handle tools/call request."""
+        """Handle tools/call request.
+        
+        Executes a tool from the tool registry and returns the result.
+        """
         name = params.get("name")
         args = params.get("arguments", {})
         
-        tool = self._tools.get(name)
+        if self._tool_registry is None:
+            raise ValueError("Tool registry not initialized")
+        
+        tool = self._tool_registry.get(name)
         if tool is None:
             raise ValueError(f"Tool not found: {name}")
         
-        result = await self._execute_tool(name, args)
-        return {"content": [{"type": "text", "text": result}]}
+        result = await self._execute_tool(tool, args)
+        return {"content": [{"type": "text", "text": result.content}]}
     
-    async def _execute_tool(self, name: str, args: dict) -> str:
-        """Execute a tool (override in subclass)."""
-        return f"Tool {name} executed with args: {args}"
+    async def _execute_tool(self, tool: Any, args: dict[str, Any]) -> Any:
+        """Execute a tool with the given arguments.
+        
+        Args:
+            tool: Tool instance from the registry
+            args: Tool arguments
+            
+        Returns:
+            ToolResult instance
+        """
+        from claude_code.tools.base import ToolContext
+        
+        context = ToolContext(
+            working_directory=self.config.working_directory,
+            environment={},
+        )
+        
+        result = await tool.execute(args, context)
+        return result
     
     async def _handle_list_resources(self, params: dict) -> dict:
-        """Handle resources/list request."""
+        """Handle resources/list request.
+        
+        Returns static resources for the MCP server.
+        Currently returns basic server info as a resource.
+        """
         return {
             "resources": [
                 {
-                    "uri": r.uri,
-                    "name": r.name,
-                    "description": r.description,
-                    "mimeType": r.mime_type,
-                }
-                for r in self._resources.values()
+                    "uri": "server://info",
+                    "name": "server_info",
+                    "description": "Information about this MCP server",
+                    "mimeType": "application/json",
+                },
+                {
+                    "uri": "server://tools",
+                    "name": "tools_list",
+                    "description": "List of available tools",
+                    "mimeType": "application/json",
+                },
             ]
         }
     
@@ -322,27 +310,56 @@ class MCPServer:
         """Handle resources/read request."""
         uri = params.get("uri")
         
-        resource = self._resources.get(uri)
-        if resource is None:
-            raise ValueError(f"Resource not found: {uri}")
+        if uri == "server://info":
+            return {
+                "contents": [{
+                    "uri": uri,
+                    "mimeType": "application/json",
+                    "text": json.dumps({
+                        "name": self.config.name,
+                        "version": self.config.version,
+                        "protocolVersion": PROTOCOL_VERSION,
+                        "toolCount": len(self._tool_registry.list_all()) if self._tool_registry else 0,
+                    }),
+                }]
+            }
         
-        return {
-            "contents": [{
-                "uri": uri,
-                "mimeType": resource.mime_type,
-                "text": f"Content of {uri}",
-            }]
-        }
+        if uri == "server://tools" and self._tool_registry:
+            tools_data = []
+            for tool in self._tool_registry.list_all():
+                definition = tool.get_definition()
+                tools_data.append({
+                    "name": definition.name,
+                    "description": definition.description,
+                })
+            return {
+                "contents": [{
+                    "uri": uri,
+                    "mimeType": "application/json",
+                    "text": json.dumps({"tools": tools_data}),
+                }]
+            }
+        
+        raise ValueError(f"Resource not found: {uri}")
     
     async def _handle_list_prompts(self, params: dict) -> dict:
-        """Handle prompts/list request."""
+        """Handle prompts/list request.
+        
+        Returns built-in prompts for the MCP server.
+        """
         return {
             "prompts": [
                 {
-                    "name": name,
-                    "description": p["description"],
-                }
-                for name, p in self._prompts.items()
+                    "name": "tool_list",
+                    "description": "Get a formatted list of all available tools",
+                },
+                {
+                    "name": "tool_info",
+                    "description": "Get detailed information about a specific tool",
+                    "arguments": [
+                        {"name": "tool_name", "description": "Name of the tool", "required": True},
+                    ],
+                },
             ]
         }
     
@@ -351,23 +368,43 @@ class MCPServer:
         name = params.get("name")
         arguments = params.get("arguments", {})
         
-        prompt = self._prompts.get(name)
-        if prompt is None:
-            raise ValueError(f"Prompt not found: {name}")
+        if name == "tool_list" and self._tool_registry:
+            tools = self._tool_registry.list_all()
+            tool_list = "\n".join(f"- **{t.name}**: {t.description}" for t in tools)
+            return {
+                "messages": [{
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": f"# Available Tools\n\n{tool_list}"
+                    }
+                }]
+            }
         
-        template = prompt["template"]
-        for key, value in arguments.items():
-            template = template.replace(f"{{{key}}}", str(value))
+        if name == "tool_info":
+            tool_name = arguments.get("tool_name")
+            if self._tool_registry and tool_name:
+                tool = self._tool_registry.get(tool_name)
+                if tool:
+                    definition = tool.get_definition()
+                    return {
+                        "messages": [{
+                            "role": "user",
+                            "content": {
+                                "type": "text",
+                                "text": f"# Tool: {definition.name}\n\n**Description:** {definition.description}\n\n**Input Schema:**\n```json\n{json.dumps(definition.input_schema, indent=2)}```"
+                            }
+                        }]
+                    }
         
-        return {
-            "messages": [{
-                "role": "user",
-                "content": {"type": "text", "text": template}
-            }]
-        }
+        raise ValueError(f"Prompt not found: {name}")
     
     async def start_stdio(self) -> None:
-        """Start STDIO server."""
+        """Start STDIO server - the most common mode for MCP.
+        
+        This mode is compatible with all MCP clients and allows
+        the server to communicate via stdin/stdout JSON-RPC messages.
+        """
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)
         
@@ -380,120 +417,83 @@ class MCPServer:
                 break
             
             try:
-                message = json.loads(line)
+                message = json.loads(line.decode("utf-8"))
                 response = await self.protocol.handle_message(message)
                 if response:
-                    print(json.dumps(response))
+                    print(json.dumps(response), flush=True)
+            except json.JSONDecodeError as e:
+                error_response = json.dumps({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32700,
+                        "message": f"Parse error: {str(e)}"
+                    }
+                })
+                print(error_response, flush=True)
             except Exception as e:
-                print(json.dumps({"error": str(e)}))
-    
-    async def start_http(self) -> None:
-        """Start HTTP server."""
-        from aiohttp import web
-        
-        async def handle(request):
-            data = await request.json()
-            response = await self.protocol.handle_message(data)
-            return web.json_response(response)
-        
-        app = web.Application()
-        app.router.add_post("/mcp", handle)
-        
-        runner = web.AppRunner(app)
-        await runner.setup()
-        
-        site = web.TCPSite(runner, self.config.host, self.config.port)
-        await site.start()
-        
-        print(f"MCP Server started on {self.config.host}:{self.config.port}")
+                error_response = json.dumps({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32603,
+                        "message": str(e)
+                    }
+                })
+                print(error_response, flush=True)
 
 
-class FileSystemMCPServer(MCPServer):
-    """MCP server for file system operations.
+async def create_mcp_server(
+    working_directory: str = ".",
+    server_name: str = "claude-code-python",
+) -> MCPServer:
+    """Create and configure an MCP server with the full tool registry.
     
-    Provides tools for reading files and listing directories.
+    This is the main entry point for creating an MCP server that exposes
+    all Claude Code Python tools to external MCP clients.
     
-    Attributes:
-        root_dir: Root directory for file operations
+    Args:
+        working_directory: Working directory for tool execution
+        server_name: Name of the MCP server
+        
+    Returns:
+        Configured MCPServer instance ready to start
     """
+    from claude_code.tools import create_default_registry
     
-    def __init__(self, root_dir: str = "/"):
-        super().__init__(MCPServerConfig(
-            name="filesystem",
-            version=DEFAULT_SERVER_VERSION,
-        ))
-        self._root_dir = Path(root_dir)
-        
-        self.add_tool(MCPToolDefinition(
-            name="read_file",
-            description="Read a file",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"}
-                },
-                "required": ["path"]
-            }
-        ))
-        
-        self.add_tool(MCPToolDefinition(
-            name="list_directory",
-            description="List directory contents",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"}
-                },
-                "required": ["path"]
-            }
-        ))
+    config = MCPServerConfig(
+        name=server_name,
+        version=DEFAULT_SERVER_VERSION,
+        working_directory=working_directory,
+    )
     
-    @property
-    def root_dir(self) -> Path:
-        """Get the root directory for file operations."""
-        return self._root_dir
+    server = MCPServer(config)
     
-    async def _execute_tool(self, name: str, args: dict[str, Any]) -> str:
-        """Execute a file system tool.
-        
-        Args:
-            name: Tool name
-            args: Tool arguments
-            
-        Returns:
-            Tool execution result
-        """
-        if name == "read_file":
-            file_path = self._root_dir / args["path"]
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            except FileNotFoundError:
-                return f"Error: File not found: {args['path']}"
-            except PermissionError:
-                return f"Error: Permission denied: {args['path']}"
-            except Exception as e:
-                return f"Error: {str(e)}"
-        
-        if name == "list_directory":
-            dir_path = self._root_dir / args["path"]
-            try:
-                return "\n".join(sorted(p.name for p in dir_path.iterdir()))
-            except FileNotFoundError:
-                return f"Error: Directory not found: {args['path']}"
-            except PermissionError:
-                return f"Error: Permission denied: {args['path']}"
-            except Exception as e:
-                return f"Error: {str(e)}"
-        
-        return await super()._execute_tool(name, args)
+    registry = create_default_registry()
+    server.set_tool_registry(registry)
+    
+    return server
+
+
+async def run_mcp_server(
+    working_directory: str = ".",
+    server_name: str = "claude-code-python",
+) -> None:
+    """Run the MCP server in STDIO mode.
+    
+    This is the main entry point for running the MCP server as a standalone
+    process that can be connected to via MCP clients.
+    
+    Args:
+        working_directory: Working directory for tool execution
+        server_name: Name of the MCP server
+    """
+    server = await create_mcp_server(working_directory, server_name)
+    await server.start_stdio()
 
 
 __all__ = [
     "MCPServer",
     "MCPServerConfig",
-    "MCPToolDefinition",
-    "MCPResourceDefinition",
     "MCPProtocolHandler",
-    "FileSystemMCPServer",
+    "create_mcp_server",
+    "run_mcp_server",
 ]

@@ -314,6 +314,18 @@ def main() -> None:
     )
     
     parser.add_argument(
+        "--mcp-serve",
+        action="store_true",
+        help="Run as MCP server (STDIO mode) for external MCP clients",
+    )
+    
+    parser.add_argument(
+        "--mcp-name",
+        default="claude-code-python",
+        help="Name of the MCP server (default: claude-code-python)",
+    )
+    
+    parser.add_argument(
         "--version",
         action="store_true",
         help="Show version",
@@ -349,6 +361,15 @@ def main() -> None:
     # Run doctor
     if args.doctor:
         asyncio.run(run_doctor())
+        return
+    
+    # Run MCP server
+    if args.mcp_serve:
+        from claude_code.mcp.server import run_mcp_server
+        asyncio.run(run_mcp_server(
+            working_directory=os.getcwd(),
+            server_name=args.mcp_name,
+        ))
         return
     
     # Initialize commands
