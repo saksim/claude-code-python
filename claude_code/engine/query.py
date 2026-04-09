@@ -147,6 +147,12 @@ class QueryConfig:
     
     # Callback for stopping
     should_stop: Optional[Callable[[], bool]] = None
+    
+    # Permission propagation (wired from Config)
+    permission_mode: str = "default"
+    always_allow: list[str] = field(default_factory=list)
+    always_deny: list[str] = field(default_factory=list)
+    session_id: Optional[str] = None
 
 
 @dataclass 
@@ -442,6 +448,11 @@ class QueryEngine:
             working_directory=os.getcwd(),
             environment={},
             abort_signal=self.abort_event,
+            permission_mode=self.config.permission_mode,
+            always_allow=list(self.config.always_allow),
+            always_deny=list(self.config.always_deny),
+            model=self.config.model,
+            session_id=self.config.session_id or self.conversation_id,
         )
         
         try:

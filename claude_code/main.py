@@ -146,11 +146,17 @@ def create_engine(
     if model is None:
         model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
     
-    # Build query config
+    # Load app config for permission propagation
+    app_config = get_config()
+    
+    # Build query config with permission propagation
     query_config = QueryConfig(
         model=model,
         max_tokens=8192,
         system_prompt=build_system_prompt(working_dir),
+        permission_mode=app_config.permission_mode.value if app_config.permission_mode else "default",
+        always_allow=list(app_config.always_allow),
+        always_deny=list(app_config.always_deny),
     )
     
     # Get tools from environment or use defaults
