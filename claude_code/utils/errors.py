@@ -81,6 +81,46 @@ class NetworkError(ClaudeCodeError):
     pass
 
 
+class ShellError(ClaudeCodeError):
+    """Shell command execution error.
+    
+    Attributes:
+        stdout: Standard output from the command
+        stderr: Standard error from the command
+        code: Exit code from the command
+        interrupted: Whether the command was interrupted
+    """
+
+    def __init__(
+        self,
+        message: str,
+        stdout: str = "",
+        stderr: str = "",
+        code: int = 0,
+        interrupted: bool = False,
+    ) -> None:
+        super().__init__(message, code="SHELL_ERROR")
+        self.stdout = stdout
+        self.stderr = stderr
+        self.code = code
+        self.interrupted = interrupted
+
+
+class TelemetrySafeError(ClaudeCodeError):
+    """Error with a message safe for telemetry.
+    
+    Use when you need an error message that doesn't contain sensitive data
+    like file paths, URLs, or code snippets.
+    
+    Attributes:
+        telemetry_message: Sanitized message for telemetry/logging
+    """
+
+    def __init__(self, message: str, telemetry_message: Optional[str] = None) -> None:
+        super().__init__(message, code="TELEMETRY_SAFE")
+        self.telemetry_message = telemetry_message or message
+
+
 class ToolExecutionError(ClaudeCodeError):
     """Tool execution failed.
 
@@ -123,6 +163,182 @@ class APIError(ClaudeCodeError):
         super().__init__(message, code="API_ERROR")
         self.status_code = status_code
         self.response = response
+
+
+# Error utility functions
+
+def to_error(e: Any) -> Exception:
+    """Normalize an unknown value into an Error.
+    
+    Use at catch-site boundaries when you need an Error instance.
+    
+    Args:
+        e: Unknown error value
+        
+    Returns:
+        Normalized Exception
+    """
+    if isinstance(e, Exception):
+        return e
+    return Exception(str(e))
+
+
+def error_message(e: Any) -> str:
+    """Extract a string message from an unknown error-like value.
+    
+    Use when you only need the message (e.g., for logging or display).
+    
+    Args:
+        e: Error-like value
+        
+    Returns:
+        Error message string
+    """
+    if isinstance(e, Exception):
+        return e.message if hasattr(e, 'message') else str(e)
+    return str(e)
+
+
+def get_errno_code(e: Any) -> Optional[str]:
+    """Extract the errno code (e.g., 'ENOENT', 'EACCES') from a caught error.
+    
+    Returns None if the error has no code or is not an ErrnoException.
+    
+    Args:
+        e: Error-like value
+        
+    Returns:
+        Errno code string or None
+    """
+    if isinstance(e, OSError):
+        return e.code
+    if isinstance(e, Exception) and hasattr(e, 'code'):
+        code = e.code
+        if isinstance(code, str):
+            return code
+    return None
+
+
+def is_enoent(e: Any) -> bool:
+    """True if the error means the path is missing, inaccessible, or 
+    structurally unreachable.
+    
+    Covers: ENOENT, ENOTDIR, ELOOP, ENOENT
+    
+    Args:
+        e: Error-like value
+        
+    Returns:
+        True if it's a "not found" error
+    """
+    code = get_errno_code(e)
+    if code is None:
+        return False
+    return code in ('ENOENT', 'ENOTDIR', 'ELOOP')
+
+
+def get_errno_path(e: Any) -> Optional[str]:
+    """Extract the errno path (the filesystem path that triggered the error)
+    from a caught error.
+    
+    Args:
+        e: Error-like value
+        
+    Returns:
+        Path string or None
+    """
+    if isinstance(e, OSError):
+        return e.filename
+    if isinstance(e, Exception) and hasattr(e, 'path'):
+        path = e.path
+        if isinstance(path, str):
+            return path
+    return None
+
+
+def short_error_stack(e: Any, max_frames: int = 5) -> str:
+    """Extract error message + top N stack frames from an unknown error.
+    
+    Use when the error flows to the model as a tool_result — full stack
+    traces are ~500-2000 chars of mostly-irrelevant internal frames and
+    waste context tokens. Keep the full stack in debug logs instead.
+    
+    Args:
+        e: Error-like value
+        max_frames: Maximum number of stack frames to include
+        
+    Returns:
+        Shortened error string
+    """
+    if not isinstance(e, Exception):
+        return str(e)
+    
+    if not e.args:
+        return e.message if hasattr(e, 'message') else str(e)
+    
+    # Get the message from args
+    message = e.args[0] if e.args else (e.message if hasattr(e, 'message') else str(e))
+    
+    # Get stack trace if available
+    if not e.__traceback__:
+        return message if isinstance(message, str) else str(message)
+    
+    # Format limited stack trace
+    import traceback
+    stack_lines = traceback.format_tb(e.__traceback__, limit=max_frames)
+    frames = [line.strip() for line in stack_lines if 'File' in line]
+    
+    if len(frames) <= max_frames:
+        return f"{message}\n" + "".join(stack_lines)
+    
+    header = f"{type(e).__name__}: {message}"
+    return header + "\n" + "\n".join(frames[:max_frames])
+
+
+def has_exact_error_message(e: Any, message: str) -> bool:
+    """Check if error has exact message.
+    
+    Args:
+        e: Error-like value
+        message: Expected message
+        
+    Returns:
+        True if messages match exactly
+    """
+    if isinstance(e, Exception):
+        return e.message == message
+    return False
+
+
+def is_retryable_error(error: Exception) -> bool:
+    """Check if an error is retryable.
+
+    Args:
+        error: The exception to check.
+
+    Returns:
+        True if the operation should be retried.
+    """
+    retryable_types = (
+        RateLimitError,
+        ConnectionError,
+        TimeoutError,
+    )
+
+    # Check if it's a retryable type
+    if isinstance(error, retryable_types):
+        return True
+
+    # Check for retryable messages
+    error_str = str(error).lower()
+    retryable_patterns = [
+        "timeout",
+        "connection",
+        "temporary",
+        "unavailable",
+    ]
+
+    return any(pattern in error_str for pattern in retryable_patterns)
 
 
 @dataclass
@@ -264,32 +480,33 @@ def get_error_message(error: Exception) -> str:
     return str(error)
 
 
-def is_retryable_error(error: Exception) -> bool:
-    """Check if an error is retryable.
-
-    Args:
-        error: The exception to check.
-
-    Returns:
-        True if the operation should be retried.
-    """
-    retryable_types = (
-        RateLimitError,
-        ConnectionError,
-        TimeoutError,
-    )
-
-    # Check if it's a retryable type
-    if isinstance(error, retryable_types):
-        return True
-
-    # Check for retryable messages
-    error_str = str(error).lower()
-    retryable_patterns = [
-        "timeout",
-        "connection",
-        "temporary",
-        "unavailable",
-    ]
-
-    return any(pattern in error_str for pattern in retryable_patterns)
+__all__ = [
+    "ClaudeCodeError",
+    "AbortError",
+    "RateLimitError",
+    "AuthenticationError",
+    "PermissionError",
+    "ContextLengthError",
+    "ValidationError",
+    "ToolError",
+    "SessionError",
+    "ConfigurationError",
+    "NetworkError",
+    "ShellError",
+    "TelemetrySafeError",
+    "ToolExecutionError",
+    "ContextError",
+    "APIError",
+    "to_error",
+    "error_message",
+    "get_errno_code",
+    "is_enoent",
+    "get_errno_path",
+    "short_error_stack",
+    "has_exact_error_message",
+    "is_retryable_error",
+    "ErrorContext",
+    "ToolErrorHandler",
+    "format_error",
+    "get_error_message",
+]
