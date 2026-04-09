@@ -21,6 +21,11 @@ class ServiceNotFoundError(Exception):
     pass
 
 
+class CircularDependencyError(Exception):
+    """Raised when circular dependency is detected during service resolution."""
+    pass
+
+
 class ServiceLifecycle(Enum):
     """Service lifecycle types."""
 
@@ -68,12 +73,13 @@ class ServiceContainer:
         limiter = container.get(RateLimiter)
     """
     
-    __slots__ = ('_services', '_lock')
+    __slots__ = ('_services', '_lock', '_resolution_stack')
     
     def __init__(self) -> None:
         """Initialize the service container."""
         self._services: dict[str, ServiceDescriptor] = {}
         self._lock = asyncio.Lock()
+        self._resolution_stack: set[str] = set()
 
     def register(
         self,
@@ -206,46 +212,86 @@ class ServiceContainer:
         return await self._resolve_async(descriptor)
 
     def _resolve(self, descriptor: ServiceDescriptor) -> Any:
-        """Resolve a service instance synchronously."""
-        if descriptor.lifecycle == ServiceLifecycle.SINGLETON:
-            if descriptor.instance is not None:
-                return descriptor.instance
-            # Create instance from factory
-            if descriptor.factory is not None:
-                instance = descriptor.factory()
-                descriptor.instance = instance
-                return instance
-            # Try to instantiate directly
-            return descriptor.service_type()
+        """Resolve a service instance synchronously.
+        
+        Raises:
+            CircularDependencyError: If circular dependency is detected.
+        """
+        service_name = descriptor.service_type.__name__
+        
+        # Check for circular dependency
+        if service_name in self._resolution_stack:
+            dependency_chain = " -> ".join(self._resolution_stack) + f" -> {service_name}"
+            raise CircularDependencyError(
+                f"Circular dependency detected: {dependency_chain}"
+            )
+        
+        # Add to resolution stack
+        self._resolution_stack.add(service_name)
+        
+        try:
+            if descriptor.lifecycle == ServiceLifecycle.SINGLETON:
+                if descriptor.instance is not None:
+                    return descriptor.instance
+                # Create instance from factory
+                if descriptor.factory is not None:
+                    instance = descriptor.factory()
+                    descriptor.instance = instance
+                    return instance
+                # Try to instantiate directly
+                return descriptor.service_type()
 
-        # Transient - always create new
-        if descriptor.factory is not None:
-            return descriptor.factory()
-        return descriptor.service_type()
+            # Transient - always create new
+            if descriptor.factory is not None:
+                return descriptor.factory()
+            return descriptor.service_type()
+        finally:
+            # Remove from resolution stack after successful resolution
+            self._resolution_stack.discard(service_name)
 
     async def _resolve_async(self, descriptor: ServiceDescriptor) -> Any:
-        """Resolve a service instance asynchronously."""
-        if descriptor.lifecycle == ServiceLifecycle.SINGLETON:
-            if descriptor.instance is not None:
-                return descriptor.instance
+        """Resolve a service instance asynchronously.
+        
+        Raises:
+            CircularDependencyError: If circular dependency is detected.
+        """
+        service_name = descriptor.service_type.__name__
+        
+        # Check for circular dependency
+        if service_name in self._resolution_stack:
+            dependency_chain = " -> ".join(self._resolution_stack) + f" -> {service_name}"
+            raise CircularDependencyError(
+                f"Circular dependency detected: {dependency_chain}"
+            )
+        
+        # Add to resolution stack
+        self._resolution_stack.add(service_name)
+        
+        try:
+            if descriptor.lifecycle == ServiceLifecycle.SINGLETON:
+                if descriptor.instance is not None:
+                    return descriptor.instance
 
-            # Check if factory is async
-            if asyncio.iscoroutinefunction(descriptor.factory):
-                instance = await descriptor.factory()
-            elif descriptor.factory is not None:
-                instance = descriptor.factory()
-            else:
-                instance = descriptor.service_type()
+                # Check if factory is async
+                if asyncio.iscoroutinefunction(descriptor.factory):
+                    instance = await descriptor.factory()
+                elif descriptor.factory is not None:
+                    instance = descriptor.factory()
+                else:
+                    instance = descriptor.service_type()
 
-            descriptor.instance = instance
-            return instance
+                descriptor.instance = instance
+                return instance
 
-        # Transient
-        if descriptor.factory is not None:
-            if asyncio.iscoroutinefunction(descriptor.factory):
-                return await descriptor.factory()
-            return descriptor.factory()
-        return descriptor.service_type()
+            # Transient
+            if descriptor.factory is not None:
+                if asyncio.iscoroutinefunction(descriptor.factory):
+                    return await descriptor.factory()
+                return descriptor.factory()
+            return descriptor.service_type()
+        finally:
+            # Remove from resolution stack after successful resolution
+            self._resolution_stack.discard(service_name)
 
     def _get_key(self, service_type: Type) -> str:
         """Get the registration key for a type."""
@@ -349,6 +395,7 @@ def injectable(
 __all__ = [
     "ServiceAlreadyRegisteredError",
     "ServiceNotFoundError",
+    "CircularDependencyError",
     "ServiceLifecycle",
     "ServiceDescriptor",
     "ServiceContainer",

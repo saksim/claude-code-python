@@ -14,10 +14,13 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
+import logging
 import os
 import json
 from pathlib import Path
 from typing import Any, Literal
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -231,27 +234,76 @@ class Config(BaseModel):
             json.dump(self.to_dict(), f, indent=2, default=str)
     
     @classmethod
-    def load(cls, path: Path | None = None) -> Config:
-        """Load configuration from file.
+    def load(cls, path: Path | None = None, environment: str | None = None) -> Config:
+        """Load configuration from file with environment support.
+        
+        Configuration loading order (later overwrites earlier):
+        1. Default values
+        2. base.json (if exists)
+        3. {environment}.json (e.g., dev.json, prod.json)
+        4. config.json (manual overrides)
+        5. Environment variables
         
         Args:
-            path: Optional path to load from.
+            path: Optional path to load base config from.
+            environment: Environment name (dev, staging, prod). 
+                        If None, reads from CLAUDE_ENV env var.
             
         Returns:
-            Config instance, or default if file doesn't exist.
+            Config instance with merged configuration.
         """
         if path is None:
             path = cls().config_dir / "config.json"
         
-        if not path.exists():
-            return cls()
+        # Determine environment
+        if environment is None:
+            environment = os.getenv("CLAUDE_ENV", "default")
         
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return cls.from_dict(data)
-        except Exception:
-            return cls()
+        # Start with default config
+        config = cls()
+        
+        # Load and merge configuration files in order
+        config_files = [
+            config.config_dir / "base.json",
+            config.config_dir / f"{environment}.json",
+            path,  # config.json
+        ]
+        
+        for config_file in config_files:
+            if config_file.exists():
+                try:
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    config = cls.from_dict(data)
+                except Exception as e:
+                    logger.warning(f"Failed to load config from {config_file}: {e}")
+        
+        # Apply environment variables (highest priority)
+        config.update_from_env()
+        
+        return config
+    
+    @classmethod
+    def load_environment_config(cls, environment: str) -> dict[str, Any]:
+        """Load configuration for a specific environment.
+        
+        Args:
+            environment: Environment name (dev, staging, prod)
+            
+        Returns:
+            Dictionary of configuration values for the environment
+        """
+        config = cls()
+        env_path = config.config_dir / f"{environment}.json"
+        
+        if env_path.exists():
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        
+        return {}
     
     def update_from_env(self) -> None:
         """Update configuration from environment variables.
