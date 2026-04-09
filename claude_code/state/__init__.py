@@ -33,6 +33,8 @@ from claude_code.state.session_state import (
     set_session_manager,
 )
 
+from claude_code.state.manager import StateManager
+
 __all__ = [
     # App State
     "AppState",
@@ -57,4 +59,7 @@ __all__ = [
     "SessionManager",
     "get_session_manager",
     "set_session_manager",
+    
+    # Unified State Manager
+    "StateManager",
 ]

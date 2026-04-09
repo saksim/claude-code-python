@@ -211,7 +211,7 @@ class LSPClient:
         """Shutdown the LSP server."""
         try:
             await self._send_message("shutdown")
-        except:
+        except (ConnectionError, asyncio.TimeoutError, OSError):
             pass
         await self._send_notification("exit", {})
         await self.stop()

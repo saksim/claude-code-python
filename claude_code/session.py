@@ -126,6 +126,8 @@ class SessionStore:
     list, and delete operations. Sessions are stored as JSON files
     in a configurable directory.
     
+    Uses __slots__ for memory optimization.
+    
     Attributes:
         _storage_dir: Directory for session storage files
     
@@ -134,7 +136,9 @@ class SessionStore:
         >>> sessions = store.list_sessions(limit=5)
     """
     
-    def __init__(self, storage_dir: Optional[str] = None) -> None:
+    __slots__ = ('_storage_dir',)
+    
+    def __init__(self, storage_dir: str | Path | None = None) -> None:
         """Initialize session store.
         
         Args:
@@ -251,6 +255,8 @@ class RuntimeSession:
     Active session that tracks messages and usage during a conversation.
     Can be persisted to storage via to_stored_session().
     
+    Uses __slots__ for memory optimization.
+    
     Attributes:
         session_id: Unique session identifier
         workspace: Working directory for this session
@@ -267,10 +273,12 @@ class RuntimeSession:
         >>> session.save()
     """
     
+    __slots__ = ('session_id', 'workspace', 'model', 'messages', 'input_tokens', 'output_tokens', 'created_at', 'last_activity', '_store')
+    
     def __init__(
         self,
-        session_id: Optional[str] = None,
-        workspace: Optional[str] = None,
+        session_id: str | None = None,
+        workspace: str | Path | None = None,
         model: str = "claude-sonnet-4-20250514",
     ) -> None:
         """Initialize runtime session.
@@ -281,7 +289,7 @@ class RuntimeSession:
             model: Model identifier to use
         """
         self.session_id = session_id or str(uuid4())[:8]
-        self.workspace = workspace or os.getcwd()
+        self.workspace = str(workspace or os.getcwd())
         self.model = model
         
         self.messages: list[str] = []
@@ -371,7 +379,7 @@ class RuntimeSession:
         return self.to_stored_session().as_markdown()
 
 
-_default_store: Optional[SessionStore] = None
+_default_store: SessionStore | None = None
 
 
 def get_session_store() -> SessionStore:

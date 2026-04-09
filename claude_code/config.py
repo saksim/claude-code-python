@@ -14,12 +14,17 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
+import logging
 import os
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator
 
 
 # Module-level constants
@@ -52,54 +57,63 @@ SUPPORTED_AWS_REGIONS: frozenset[str] = frozenset({
 })
 
 
-@dataclass(frozen=True, slots=True)
-class APIConfig:
-    """API configuration settings.
+class APIConfig(BaseModel):
+    """API configuration settings using Pydantic for validation."""
+    model_config = {"frozen": True, "slots": True}
     
-    Using frozen=True, slots=True for immutability.
-    
-    Attributes:
-        provider: API provider name
-        api_key: Optional API key
-        model: Model identifier
-        max_tokens: Maximum tokens in response
-        temperature: Optional sampling temperature
-    """
     provider: str = "anthropic"
-    api_key: Optional[str] = None
+    api_key: str | None = None
     model: str = DEFAULT_MODEL
     max_tokens: int = DEFAULT_MAX_TOKENS
-    temperature: Optional[float] = None
+    temperature: float | None = None
+    
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        if v not in VALID_PROVIDERS:
+            raise ValueError(f"Provider must be one of: {VALID_PROVIDERS}")
+        return v
+    
+    @field_validator('max_tokens')
+    @classmethod
+    def validate_max_tokens(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("max_tokens must be positive")
+        if v > 200000:
+            raise ValueError("max_tokens cannot exceed 200000")
+        return v
+    
+    @field_validator('temperature')
+    @classmethod
+    def validate_temperature(cls, v: float | None) -> float | None:
+        if v is not None and (v < 0 or v > 2):
+            raise ValueError("temperature must be between 0 and 2")
+        return v
 
 
-@dataclass(frozen=True, slots=True)
-class ProviderConfig:
-    """Provider-specific configuration.
+class ProviderConfig(BaseModel):
+    """Provider-specific configuration using Pydantic."""
+    model_config = {"frozen": True, "slots": True}
     
-    Using frozen=True, slots=True for immutability.
-    
-    Attributes:
-        aws_region: AWS region for Bedrock
-        aws_profile: AWS profile for Bedrock
-        vertex_project: Google Cloud project for Vertex
-        vertex_location: Google Cloud location for Vertex
-        azure_endpoint: Azure OpenAI endpoint
-        azure_api_version: Azure API version
-    """
-    aws_region: Optional[str] = None
-    aws_profile: Optional[str] = None
-    vertex_project: Optional[str] = None
-    vertex_location: Optional[str] = None
-    azure_endpoint: Optional[str] = None
+    aws_region: str | None = None
+    aws_profile: str | None = None
+    vertex_project: str | None = None
+    vertex_location: str | None = None
+    azure_endpoint: str | None = None
     azure_api_version: str = DEFAULT_AZURE_API_VERSION
-
-
-@dataclass
-class Config:
-    """Main configuration for Claude Code.
     
-    Using standard dataclass (not frozen) because it needs to support
-    runtime updates from environment variables and user settings.
+    @field_validator('aws_region')
+    @classmethod
+    def validate_aws_region(cls, v: str | None) -> str | None:
+        if v is not None and v not in SUPPORTED_AWS_REGIONS:
+            raise ValueError(f"AWS region must be one of: {SUPPORTED_AWS_REGIONS}")
+        return v
+
+
+class Config(BaseModel):
+    """Main configuration for Claude Code using Pydantic.
+    
+    Using Pydantic for automatic validation and better error handling.
     
     Attributes:
         api_provider: API provider name
@@ -126,47 +140,64 @@ class Config:
         compact_threshold: Token threshold for compaction
         enable_telemetry: Enable telemetry reporting
     """
+    model_config = {"arbitrary_types_allowed": True}
     
     # API settings
     api_provider: str = "anthropic"
-    api_key: Optional[str] = None
+    api_key: str | None = None
     model: str = DEFAULT_MODEL
     max_tokens: int = DEFAULT_MAX_TOKENS
-    temperature: Optional[float] = None
+    temperature: float | None = None
     
     # Provider-specific settings
-    aws_region: Optional[str] = None
-    aws_profile: Optional[str] = None
-    vertex_project: Optional[str] = None
-    vertex_location: Optional[str] = None
-    azure_endpoint: Optional[str] = None
+    aws_region: str | None = None
+    aws_profile: str | None = None
+    vertex_project: str | None = None
+    vertex_location: str | None = None
+    azure_endpoint: str | None = None
     azure_api_version: str = DEFAULT_AZURE_API_VERSION
     
     # Behavior settings
     permission_mode: PermissionMode = PermissionMode.DEFAULT
-    always_allow: list[str] = field(default_factory=list)
-    always_deny: list[str] = field(default_factory=list)
+    always_allow: list[str] = Field(default_factory=list)
+    always_deny: list[str] = Field(default_factory=list)
     verbose: bool = False
     stream_output: bool = True
     show_timing: bool = True
     
     # Paths
-    config_dir: Path = field(default_factory=lambda: Path.home() / ".claude-code-python")
-    cache_dir: Optional[Path] = None
-    data_dir: Optional[Path] = None
+    config_dir: Path = Field(default_factory=lambda: Path.home() / ".claude-code-python")
+    cache_dir: Path | None = None
+    data_dir: Path | None = None
     
     # Features
     enable_compact: bool = True
     compact_threshold: int = DEFAULT_COMPACT_THRESHOLD
     enable_telemetry: bool = False
     
-    def __post_init__(self) -> None:
-        """Post-initialization processing."""
+    def __init__(self, **data: Any) -> None:
+        """Initialize with path defaults."""
+        super().__init__(**data)
+        # Set default derived paths if not provided
         if self.cache_dir is None:
-            self.cache_dir = self.config_dir / "cache"
-        
+            object.__setattr__(self, 'cache_dir', self.config_dir / "cache")
         if self.data_dir is None:
-            self.data_dir = self.config_dir / "data"
+            object.__setattr__(self, 'data_dir', self.config_dir / "data")
+    
+    @field_validator('api_provider')
+    @classmethod
+    def validate_api_provider(cls, v: str) -> str:
+        if v not in VALID_PROVIDERS:
+            raise ValueError(f"Provider must be one of: {VALID_PROVIDERS}")
+        return v
+    
+    @field_validator('permission_mode', mode='before')
+    def validate_permission_mode(cls, v: Any) -> PermissionMode:
+        if isinstance(v, PermissionMode):
+            return v
+        if isinstance(v, str):
+            return PermissionMode(v.lower())
+        raise ValueError("Invalid permission mode")
     
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary.
@@ -174,28 +205,7 @@ class Config:
         Returns:
             Dictionary representation of config.
         """
-        return {
-            "api_provider": self.api_provider,
-            "api_key": self.api_key,
-            "model": self.model,
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
-            "aws_region": self.aws_region,
-            "aws_profile": self.aws_profile,
-            "vertex_project": self.vertex_project,
-            "vertex_location": self.vertex_location,
-            "azure_endpoint": self.azure_endpoint,
-            "azure_api_version": self.azure_api_version,
-            "permission_mode": self.permission_mode.value,
-            "always_allow": self.always_allow,
-            "always_deny": self.always_deny,
-            "verbose": self.verbose,
-            "stream_output": self.stream_output,
-            "show_timing": self.show_timing,
-            "enable_compact": self.enable_compact,
-            "compact_threshold": self.compact_threshold,
-            "enable_telemetry": self.enable_telemetry,
-        }
+        return self.model_dump()
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -207,11 +217,9 @@ class Config:
         Returns:
             Config instance.
         """
-        if "permission_mode" in data:
-            data["permission_mode"] = PermissionMode(data["permission_mode"])
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        return cls(**data)
     
-    def save(self, path: Optional[Path] = None) -> None:
+    def save(self, path: Path | None = None) -> None:
         """Save configuration to file.
         
         Args:
@@ -223,30 +231,79 @@ class Config:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         
         with open(path, 'w', encoding='utf-8') as f:
-            json.dump(self.to_dict(), f, indent=2)
+            json.dump(self.to_dict(), f, indent=2, default=str)
     
     @classmethod
-    def load(cls, path: Optional[Path] = None) -> Config:
-        """Load configuration from file.
+    def load(cls, path: Path | None = None, environment: str | None = None) -> Config:
+        """Load configuration from file with environment support.
+        
+        Configuration loading order (later overwrites earlier):
+        1. Default values
+        2. base.json (if exists)
+        3. {environment}.json (e.g., dev.json, prod.json)
+        4. config.json (manual overrides)
+        5. Environment variables
         
         Args:
-            path: Optional path to load from.
+            path: Optional path to load base config from.
+            environment: Environment name (dev, staging, prod). 
+                        If None, reads from CLAUDE_ENV env var.
             
         Returns:
-            Config instance, or default if file doesn't exist.
+            Config instance with merged configuration.
         """
         if path is None:
             path = cls().config_dir / "config.json"
         
-        if not path.exists():
-            return cls()
+        # Determine environment
+        if environment is None:
+            environment = os.getenv("CLAUDE_ENV", "default")
         
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return cls.from_dict(data)
-        except Exception:
-            return cls()
+        # Start with default config
+        config = cls()
+        
+        # Load and merge configuration files in order
+        config_files = [
+            config.config_dir / "base.json",
+            config.config_dir / f"{environment}.json",
+            path,  # config.json
+        ]
+        
+        for config_file in config_files:
+            if config_file.exists():
+                try:
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    config = cls.from_dict(data)
+                except Exception as e:
+                    logger.warning(f"Failed to load config from {config_file}: {e}")
+        
+        # Apply environment variables (highest priority)
+        config.update_from_env()
+        
+        return config
+    
+    @classmethod
+    def load_environment_config(cls, environment: str) -> dict[str, Any]:
+        """Load configuration for a specific environment.
+        
+        Args:
+            environment: Environment name (dev, staging, prod)
+            
+        Returns:
+            Dictionary of configuration values for the environment
+        """
+        config = cls()
+        env_path = config.config_dir / f"{environment}.json"
+        
+        if env_path.exists():
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        
+        return {}
     
     def update_from_env(self) -> None:
         """Update configuration from environment variables.
@@ -263,60 +320,68 @@ class Config:
         - CLAUDE_VERBOSE
         - CLAUDE_PERMISSION_MODE
         """
+        # Use object.__setattr__ for Pydantic frozen model
+        def _set(attr: str, value: Any) -> None:
+            object.__setattr__(self, attr, value)
+        
         # API settings
         if api_key := os.getenv("ANTHROPIC_API_KEY"):
-            self.api_key = api_key
+            _set("api_key", api_key)
         
         if provider := os.getenv("CLAUDE_API_PROVIDER"):
-            self.api_provider = provider
+            if provider in VALID_PROVIDERS:
+                _set("api_provider", provider)
         
         if model := os.getenv("CLAUDE_MODEL"):
-            self.model = model
+            _set("model", model)
         
         if max_tokens := os.getenv("CLAUDE_MAX_TOKENS"):
             try:
-                self.max_tokens = int(max_tokens)
+                tokens = int(max_tokens)
+                if 0 < tokens <= 200000:
+                    _set("max_tokens", tokens)
             except ValueError:
                 pass
         
         if temp := os.getenv("CLAUDE_TEMPERATURE"):
             try:
-                self.temperature = float(temp)
+                temp_val = float(temp)
+                if 0 <= temp_val <= 2:
+                    _set("temperature", temp_val)
             except ValueError:
                 pass
         
         # AWS settings
         if region := os.getenv("AWS_REGION"):
-            self.aws_region = region
+            _set("aws_region", region)
         if profile := os.getenv("AWS_PROFILE"):
-            self.aws_profile = profile
+            _set("aws_profile", profile)
         
         # Vertex settings
         if project := os.getenv("VERTEX_PROJECT"):
-            self.vertex_project = project
+            _set("vertex_project", project)
         if location := os.getenv("VERTEX_LOCATION"):
-            self.vertex_location = location
+            _set("vertex_location", location)
         
         # Azure settings
         if endpoint := os.getenv("AZURE_OPENAI_ENDPOINT"):
-            self.azure_endpoint = endpoint
+            _set("azure_endpoint", endpoint)
         if api_version := os.getenv("AZURE_OPENAI_API_VERSION"):
-            self.azure_api_version = api_version
+            _set("azure_api_version", api_version)
         
         # Behavior settings
         if os.getenv("CLAUDE_VERBOSE"):
-            self.verbose = True
+            _set("verbose", True)
         
         if mode := os.getenv("CLAUDE_PERMISSION_MODE"):
             try:
-                self.permission_mode = PermissionMode(mode.lower())
+                _set("permission_mode", PermissionMode(mode.lower()))
             except ValueError:
                 pass
 
 
 class LocalSettings:
-    """
-    Local settings that can be saved per-project.
+    """Local settings that can be saved per-project.
     
     Stored in .claude-code-python.json in the working directory.
     
@@ -324,9 +389,12 @@ class LocalSettings:
     - Clear property definitions
     - Type hints
     - Docstrings
+    - __slots__ for memory optimization
     """
     
-    def __init__(self, working_dir: Optional[str] = None) -> None:
+    __slots__ = ('working_dir', '_settings')
+    
+    def __init__(self, working_dir: str | Path | None = None) -> None:
         """Initialize local settings.
         
         Args:
@@ -426,7 +494,7 @@ class LocalSettings:
 
 
 # Global configuration instance
-_config: Optional[Config] = None
+_config: Config | None = None
 
 
 def get_config() -> Config:
@@ -484,7 +552,8 @@ def _get_settings():
     return Settings()
 
 
-_settings = None
+_settings: Any = None
+
 
 def get_settings() -> Any:
     """Get the global settings instance."""
@@ -492,3 +561,24 @@ def get_settings() -> Any:
     if _settings is None:
         _settings = _get_settings()
     return _settings
+
+
+__all__ = [
+    "APIConfig",
+    "ProviderConfig",
+    "Config",
+    "LocalSettings",
+    "PermissionMode",
+    "DEFAULT_MODEL",
+    "DEFAULT_MAX_TOKENS",
+    "DEFAULT_AZURE_API_VERSION",
+    "DEFAULT_COMPACT_THRESHOLD",
+    "VALID_PROVIDERS",
+    "VALID_PERMISSION_MODES",
+    "SUPPORTED_AWS_REGIONS",
+    "ENV_PREFIX",
+    "get_config",
+    "save_config",
+    "get_features",
+    "get_settings",
+]

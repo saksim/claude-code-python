@@ -15,10 +15,13 @@ from __future__ import annotations
 import os
 import subprocess
 import glob
+import logging
 from typing import Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +139,7 @@ class ContextBuilder:
             )
             if result.returncode == 0:
                 ctx.branch = result.stdout.strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
         
         try:
@@ -151,7 +154,7 @@ class ContextBuilder:
                 ctx.default_branch = result.stdout.strip().replace("refs/remotes/origin/", "")
             else:
                 ctx.default_branch = "main"
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             ctx.default_branch = "main"
         
         try:
@@ -164,7 +167,7 @@ class ContextBuilder:
             )
             if result.returncode == 0:
                 ctx.status = result.stdout.strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
         
         try:
@@ -177,7 +180,7 @@ class ContextBuilder:
             )
             if result.returncode == 0:
                 ctx.recent_commits = result.stdout.strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
         
         try:
@@ -190,7 +193,7 @@ class ContextBuilder:
             )
             if result.returncode == 0:
                 ctx.user_name = result.stdout.strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
         
         try:
@@ -203,7 +206,7 @@ class ContextBuilder:
             )
             if result.returncode == 0:
                 ctx.user_email = result.stdout.strip()
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
         
         self._git_context = ctx
@@ -359,7 +362,7 @@ class ContextBuilder:
                     content = f.read().strip()
                     if content:
                         contents.append(f"=== {rel_path} ===\n\n{content}")
-            except:
+            except (IOError, OSError, UnicodeDecodeError):
                 continue
         
         if not contents:
@@ -422,7 +425,7 @@ class ContextBuilder:
                 timeout=5,
             )
             return result.returncode == 0 and "true" in result.stdout
-        except:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             return False
     
     def invalidate_cache(self) -> None:

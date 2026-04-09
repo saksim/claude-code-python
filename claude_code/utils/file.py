@@ -1,4 +1,12 @@
-"""File utilities for Claude Code Python."""
+"""File utilities for Claude Code Python.
+
+Following TOP Python Dev standards:
+- Clear type hints
+- Comprehensive docstrings
+- Async versions for I/O operations
+- Frozen dataclass with __slots__ for memory optimization
+- Context managers for resource management
+"""
 
 from __future__ import annotations
 
@@ -33,6 +41,24 @@ def read_file(path: str | Path, encoding: str = DEFAULT_ENCODING) -> str:
         return f.read()
 
 
+async def read_file_async(path: str | Path, encoding: str = DEFAULT_ENCODING) -> str:
+    """Read a file asynchronously and return its contents.
+
+    Args:
+        path: Path to the file.
+        encoding: Character encoding to use.
+
+    Returns:
+        The file contents as a string.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+    """
+    import aiofiles
+    async with aiofiles.open(path, "r", encoding=encoding, errors="replace") as f:
+        return await f.read()
+
+
 def write_file(path: str | Path, content: str, encoding: str = DEFAULT_ENCODING) -> None:
     """Write content to a file.
 
@@ -48,6 +74,24 @@ def write_file(path: str | Path, content: str, encoding: str = DEFAULT_ENCODING)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding=encoding) as f:
         f.write(content)
+
+
+async def write_file_async(path: str | Path, content: str, encoding: str = DEFAULT_ENCODING) -> None:
+    """Write content to a file asynchronously.
+
+    Args:
+        path: Path to the file.
+        content: Content to write.
+        encoding: Character encoding to use.
+
+    Raises:
+        IOError: If the file cannot be written.
+    """
+    import aiofiles
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    async with aiofiles.open(path, "w", encoding=encoding) as f:
+        await f.write(content)
 
 
 def read_file_lines(path: str | Path, encoding: str = DEFAULT_ENCODING) -> list[str]:
@@ -368,3 +412,32 @@ def truncate_file(path: str | Path, max_lines: int) -> str:
     write_file(path, "".join(kept))
 
     return "".join(removed)
+
+
+__all__ = [
+    "DEFAULT_ENCODING",
+    "CHUNK_SIZE",
+    "SAMPLE_SIZE",
+    "read_file",
+    "read_file_async",
+    "write_file",
+    "write_file_async",
+    "read_file_lines",
+    "get_file_size",
+    "get_file_mtime",
+    "file_exists",
+    "dir_exists",
+    "compute_file_hash",
+    "compute_content_hash",
+    "get_file_extension",
+    "get_mime_type",
+    "detect_line_endings",
+    "detect_encoding",
+    "read_file_with_metadata",
+    "write_file_with_metadata",
+    "FileModificationInfo",
+    "get_file_modification_info",
+    "has_file_changed",
+    "safe_write_file",
+    "truncate_file",
+]

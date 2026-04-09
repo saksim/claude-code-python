@@ -1,10 +1,22 @@
-"""Formatting utilities for Claude Code Python."""
+"""Formatting utilities for Claude Code Python.
+
+Following TOP Python Dev standards:
+- Clear type hints
+- Comprehensive docstrings
+- Precompiled regex patterns for performance
+"""
 
 from __future__ import annotations
 
 import re
 import textwrap
 from typing import Any
+
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+CURLY_BRACE_PATTERN = re.compile(r"\{[^}]+\}")
+CODE_BLOCK_PATTERN = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
 
 
 def truncate(text: str, max_length: int, suffix: str = "...") -> str:
@@ -76,9 +88,6 @@ def indent(text: str, spaces: int = 2, skip_first: bool = False) -> str:
     return "\n".join(prefix + line for line in lines)
 
 
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
-
-
 def remove_ansi(text: str) -> str:
     """Remove ANSI escape sequences from text.
 
@@ -100,15 +109,8 @@ def strip_color_codes(text: str) -> str:
     Returns:
         Cleaned text.
     """
-    patterns = [
-        r"<[^>]+>",  # HTML-like tags
-        r"\{[^}]+\}",  # Curly brace style
-    ]
-
-    result = text
-    for pattern in patterns:
-        result = re.sub(pattern, "", result)
-
+    result = HTML_TAG_PATTERN.sub("", text)
+    result = CURLY_BRACE_PATTERN.sub("", result)
     return result
 
 
@@ -256,12 +258,8 @@ def highlight_text(
         return text
 
     escaped = re.escape(pattern)
-    return re.sub(
-        f"({escaped})",
-        f"{prefix}\\1{suffix}",
-        text,
-        flags=re.IGNORECASE,
-    )
+    compiled_pattern = re.compile(f"({escaped})", re.IGNORECASE)
+    return compiled_pattern.sub(f"{prefix}\\1{suffix}", text)
 
 
 def extract_code_blocks(text: str) -> list[tuple[str, str]]:
@@ -273,9 +271,7 @@ def extract_code_blocks(text: str) -> list[tuple[str, str]]:
     Returns:
         List of (language, code) tuples.
     """
-    pattern = r"```(\w*)\n(.*?)```"
-    matches = re.findall(pattern, text, re.DOTALL)
-    return matches
+    return CODE_BLOCK_PATTERN.findall(text)
 
 
 def remove_extra_whitespace(text: str) -> str:
@@ -303,3 +299,23 @@ def normalize_whitespace(text: str) -> str:
         Text with normalized whitespace (single spaces between words).
     """
     return " ".join(text.split())
+
+
+__all__ = [
+    "truncate",
+    "truncate_middle",
+    "word_wrap",
+    "indent",
+    "remove_ansi",
+    "strip_color_codes",
+    "format_duration",
+    "format_bytes",
+    "format_number",
+    "format_list",
+    "pluralize",
+    "format_table",
+    "highlight_text",
+    "extract_code_blocks",
+    "remove_extra_whitespace",
+    "normalize_whitespace",
+]

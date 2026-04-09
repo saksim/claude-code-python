@@ -1,11 +1,20 @@
-"""JSON utilities for Claude Code Python."""
+"""JSON utilities for Claude Code Python.
+
+Following TOP Python Dev standards:
+- Clear type hints
+- Comprehensive docstrings
+- Structured logging for performance monitoring
+"""
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Callable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def parse_json(text: str, default: Any = None) -> Any:
@@ -22,6 +31,33 @@ def parse_json(text: str, default: Any = None) -> Any:
         return json.loads(text)
     except (json.JSONDecodeError, TypeError):
         return default
+
+
+def json_parse(text: str, reviver: Callable[[str, Any], Any] | None = None) -> Any:
+    """Parse JSON with optional reviver function.
+    
+    This is a wrapper around json.loads with performance monitoring.
+    Uses the reviver branch only when needed to keep the fast path optimized.
+
+    Args:
+        text: JSON string to parse.
+        reviver: Optional reviver function for transform.
+
+    Returns:
+        Parsed JSON object.
+        
+    Raises:
+        json.JSONDecodeError: If text is not valid JSON.
+    """
+    # Log slow operations for performance monitoring
+    if len(text) > 10000:
+        logger.debug(f"JSON.parse: parsing {len(text)} chars")
+    
+    # V8 de-opts JSON.parse when a second argument is passed, even if undefined.
+    # Branch explicitly so the common (no-reviver) path stays on the fast path.
+    if reviver is None:
+        return json.loads(text)
+    return json.loads(text, reviver)
 
 
 def safe_json_parse(text: str) -> tuple[bool, Any]:

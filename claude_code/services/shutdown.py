@@ -4,11 +4,14 @@ Provides clean shutdown with resource cleanup and signal handling.
 """
 
 import asyncio
+import logging
 import signal
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ShutdownPhase(Enum):
@@ -106,7 +109,7 @@ class ShutdownManager:
         if self._phase == ShutdownPhase.COMPLETED:
             return
 
-        print(f"Shutting down gracefully: {reason}")
+        logger.info(f"Shutting down gracefully: {reason}")
         self._phase = ShutdownPhase.DRAINING
 
         # Call shutdown callback
@@ -124,7 +127,7 @@ class ShutdownManager:
                     timeout=self.config.timeout,
                 )
             except asyncio.TimeoutError:
-                print("Warning: Some tasks did not complete in time")
+                logger.warning("Some tasks did not complete in time")
 
         self._phase = ShutdownPhase.STOPPING
 
@@ -135,9 +138,9 @@ class ShutdownManager:
                     await cleanup()
                 else:
                     cleanup()
-                print(f"Cleaned up: {name}")
+                logger.debug(f"Cleaned up: {name}")
             except Exception as e:
-                print(f"Error during cleanup {name}: {e}")
+                logger.error(f"Error during cleanup {name}: {e}")
 
         # Call final cleanup callback
         if self.config.on_cleanup:
@@ -148,7 +151,7 @@ class ShutdownManager:
 
         self._phase = ShutdownPhase.COMPLETED
         self._shutdown_event.set()
-        print("Shutdown complete")
+        logger.info("Shutdown complete")
 
     async def wait(self) -> None:
         """Wait for shutdown to complete."""

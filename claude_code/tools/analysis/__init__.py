@@ -107,7 +107,7 @@ class CodeAnalyzer:
         try:
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
-        except:
+        except (IOError, OSError):
             return CodeMetrics()
         
         metrics = CodeMetrics(lines=len(lines))
@@ -148,7 +148,7 @@ class CodeAnalyzer:
         try:
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
-        except:
+        except (IOError, OSError):
             return issues
         
         if len(content) > 100000:
@@ -240,7 +240,7 @@ class ComplexityAnalyzer:
         try:
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
-        except:
+        except (IOError, OSError):
             return 0
         
         complexity = 1
