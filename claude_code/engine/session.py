@@ -6,12 +6,15 @@ Handles conversation persistence and history.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_STORAGE_DIR = Path.home() / ".claude-code-python" / "sessions"
@@ -207,7 +210,7 @@ class SessionStore:
             return session
 
         except Exception as e:
-            print(f"Error loading session: {e}")
+            logger.error(f"Error loading session: {e}")
             return None
 
     def list_sessions(self) -> list[SessionMetadata]:

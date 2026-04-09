@@ -338,7 +338,10 @@ class TelemetryService:
 
     def _print_event(self, event: TelemetryEvent) -> None:
         """Print event to console.
-
+        
+        Note: This is intentionally print() for CLI output when --export-console is enabled.
+        Use logging for programmatic access to telemetry data.
+        
         Args:
             event: The event to print.
         """

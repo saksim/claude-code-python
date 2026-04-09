@@ -9,8 +9,11 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,12 +185,13 @@ class FeatureDiscovery:
     
     @classmethod
     def print_help(cls) -> None:
-        """Print available features and how to enable them."""
-        import os
+        """Print available features and how to enable them.
         
+        Note: This prints to stdout for CLI help display purposes.
+        """
         enabled = cls.list_enabled()
         disabled = cls.list_disabled()
-        
+
         print("=" * 60)
         print("Claude Code Python - Available Features")
         print("=" * 60)

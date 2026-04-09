@@ -4,11 +4,14 @@ Provides event-driven architecture for decoupled service communication.
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 import uuid
+
+logger = logging.getLogger(__name__)
 
 
 class EventPriority(Enum):
@@ -83,7 +86,7 @@ class EventBus:
 
         # Subscribe to events
         async def on_tool_execute(event):
-            print(f"Tool executed: {event.payload}")
+            logger.debug(f"Tool executed: {event.payload}")
 
         event_bus.subscribe("tool.execute", on_tool_execute)
 
@@ -144,7 +147,7 @@ class EventBus:
                 break
             except Exception as e:
                 self._stats["failed"] += 1
-                print(f"Error processing event: {e}")
+                logger.error(f"Error processing event: {e}")
 
     async def _dispatch_event(self, event: Event) -> None:
         """Dispatch an event to all handlers."""
@@ -320,7 +323,7 @@ def on_event(
     Usage:
         @on_event("tool.execute")
         async def handle_tool_execute(event):
-            print(f"Tool: {event.payload}")
+            logger.debug(f"Tool: {event.payload}")
     """
     def decorator(handler: Callable[[Event], Any]) -> Callable[[Event], Any]:
         get_event_bus().subscribe(topic, handler, priority)
@@ -342,7 +345,7 @@ def on_all_events(
     Usage:
         @on_all_events()
         async def handle_all(event):
-            print(f"Event: {event.type}")
+            logger.debug(f"Event: {event.type}")
     """
     def decorator(handler: Callable[[Event], Any]) -> Callable[[Event], Any]:
         get_event_bus().subscribe_all(handler, priority)

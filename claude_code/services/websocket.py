@@ -5,9 +5,12 @@ Note: This is a framework - actual implementation requires aiohttp or websockets
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketState(Enum):
@@ -58,7 +61,7 @@ class WebSocketServer:
 
         @server.on_message
         async def handle_message(msg):
-            print(f"Received: {msg.data}")
+            logger.debug(f"Received: {msg.data}")
 
         await server.start()
         await asyncio.Event().wait()  # Keep running
@@ -141,13 +144,13 @@ class WebSocketServer:
             await site.start()
 
             self._running = True
-            print(f"WebSocket server started on {self.host}:{self.port}")
+            logger.info(f"WebSocket server started on {self.host}:{self.port}")
 
         except ImportError:
-            print("WebSocket server requires aiohttp. Install with: pip install aiohttp")
+            logger.warning("WebSocket server requires aiohttp. Install with: pip install aiohttp")
             self._running = False
         except Exception as e:
-            print(f"Failed to start WebSocket server: {e}")
+            logger.error(f"Failed to start WebSocket server: {e}")
             self._running = False
 
     async def stop(self) -> None:
@@ -164,7 +167,7 @@ class WebSocketServer:
         if self._server:
             await self._server.cleanup()
 
-        print("WebSocket server stopped")
+        logger.info("WebSocket server stopped")
 
     def on_message(self, handler: Callable[[WebSocketMessage], Any]) -> Callable:
         """Decorator to register message handler.
@@ -233,7 +236,7 @@ class WebSocketClient:
 
         @client.on_message
         async def handle_message(msg):
-            print(f"Received: {msg.data}")
+            logger.debug(f"Received: {msg.data}")
 
         await client.connect()
     """
@@ -267,10 +270,10 @@ class WebSocketClient:
                 self._reconnect_count = 0
                 return True
         except ImportError:
-            print("WebSocket client requires aiohttp. Install with: pip install aiohttp")
+            logger.warning("WebSocket client requires aiohttp. Install with: pip install aiohttp")
             return False
         except Exception as e:
-            print(f"Failed to connect: {e}")
+            logger.error(f"Failed to connect: {e}")
             self._state = WebSocketState.ERROR
             return False
 
