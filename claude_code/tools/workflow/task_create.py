@@ -10,11 +10,9 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any, Optional
-from uuid import uuid4
 
+from claude_code.tasks.repository import create_file_task_repository
 from claude_code.tools.base import Tool, ToolCallback, ToolContext, ToolResult
 
 
@@ -81,30 +79,12 @@ class TaskCreateTool(Tool):
         
         if not title:
             return ToolResult(content="Error: title is required", is_error=True)
-        
-        task_dir = Path(context.working_directory) / ".claude"
-        task_dir.mkdir(parents=True, exist_ok=True)
-        
-        task_file = task_dir / "tasks.json"
-        
-        tasks: list[dict[str, Any]] = []
-        if task_file.exists():
-            try:
-                tasks = json.loads(task_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                pass
-        
-        task_id = str(uuid4())[:8]
-        
-        task: dict[str, Any] = {
-            "id": task_id,
-            "title": title,
-            "description": description,
-            "status": status,
-        }
-        
-        tasks.append(task)
-        
-        task_file.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
-        
+        repository = create_file_task_repository(context.working_directory)
+        task = repository.create_task(
+            title=title,
+            description=description,
+            status=status,
+        )
+        task_id = str(task.get("id", "unknown"))
+
         return ToolResult(content=f"Task #{task_id} created: {title}")

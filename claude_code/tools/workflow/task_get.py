@@ -11,15 +11,10 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional, Any
 
+from claude_code.tasks.repository import create_file_task_repository
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
-
-
-# Default constants
-DEFAULT_TASK_DIR: str = ".claude"
-DEFAULT_TASK_FILENAME: str = "tasks.json"
 
 
 class TaskGetTool(Tool):
@@ -78,29 +73,20 @@ class TaskGetTool(Tool):
         if not task_id:
             return ToolResult(content="Error: task_id is required", is_error=True)
         
-        task_file = Path(context.working_directory) / DEFAULT_TASK_DIR / DEFAULT_TASK_FILENAME
-        
-        if not task_file.exists():
-            return ToolResult(content=f"Task {task_id} not found (no tasks file)")
-        
         try:
-            import json
-            with open(task_file, 'r', encoding='utf-8') as f:
-                tasks: list[dict[str, Any]] = json.load(f)
-            
-            for task in tasks:
-                if task.get("id") == task_id:
-                    # Format task details
-                    lines = [
-                        f"Task: {task.get('title', 'Untitled')}",
-                        f"Status: {task.get('status', 'pending')}",
-                        f"ID: {task.get('id', 'N/A')}",
-                    ]
-                    if desc := task.get("description"):
-                        lines.append(f"Description: {desc}")
-                    return ToolResult(content="\n".join(lines))
-            
-            return ToolResult(content=f"Task {task_id} not found", is_error=True)
+            repository = create_file_task_repository(context.working_directory)
+            task = repository.get_task(task_id)
+            if task is None:
+                return ToolResult(content=f"Task {task_id} not found", is_error=True)
+
+            lines = [
+                f"Task: {task.get('title', 'Untitled')}",
+                f"Status: {task.get('status', 'pending')}",
+                f"ID: {task.get('id', 'N/A')}",
+            ]
+            if desc := task.get("description"):
+                lines.append(f"Description: {desc}")
+            return ToolResult(content="\n".join(lines))
             
         except Exception as e:
             return ToolResult(content=f"Error: {str(e)}", is_error=True)

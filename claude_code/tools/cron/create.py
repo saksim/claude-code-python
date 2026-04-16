@@ -23,6 +23,7 @@ from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
 
 DEFAULT_MAX_AGE_DAYS = 14
 MAX_JOBS = 50
+_SESSION_ONLY_TASKS: dict[str, dict[str, Any]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +96,30 @@ def cron_to_human(cron: str) -> str:
             descriptions.append(f"on day {dow}")
     
     return ", ".join(descriptions) if descriptions else cron
+
+
+def _load_persisted_tasks(schedule_file: Path) -> dict[str, dict[str, Any]]:
+    """Load persisted cron tasks from disk."""
+    if not schedule_file.exists():
+        return {}
+    try:
+        with open(schedule_file, encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_persisted_tasks(schedule_file: Path, tasks: dict[str, dict[str, Any]]) -> None:
+    """Persist cron tasks atomically."""
+    schedule_file.parent.mkdir(parents=True, exist_ok=True)
+    temp_file = schedule_file.with_name(f"{schedule_file.name}.{uuid4().hex}.tmp")
+    payload = json.dumps(tasks, indent=2)
+    temp_file.write_text(payload, encoding="utf-8")
+    try:
+        temp_file.replace(schedule_file)
+    except PermissionError:
+        schedule_file.write_text(payload, encoding="utf-8")
 
 
 class CronCreateTool(Tool):
@@ -187,14 +212,7 @@ class CronCreateTool(Tool):
         human_schedule = cron_to_human(cron)
         
         schedule_file = Path(context.working_directory) / ".claude" / "scheduled_tasks.json"
-        schedule_file.parent.mkdir(exist_ok=True)
-        
-        tasks = {}
-        if schedule_file.exists():
-            with open(schedule_file) as f:
-                tasks = json.load(f)
-        
-        tasks[task_id] = {
+        task_payload: dict[str, Any] = {
             "cron": cron,
             "prompt": prompt,
             "recurring": recurring,
@@ -203,9 +221,13 @@ class CronCreateTool(Tool):
             "last_run": None,
             "status": "active"
         }
-        
-        with open(schedule_file, "w") as f:
-            json.dump(tasks, f, indent=2)
+
+        if durable:
+            tasks = _load_persisted_tasks(schedule_file)
+            tasks[task_id] = task_payload
+            _save_persisted_tasks(schedule_file, tasks)
+        else:
+            _SESSION_ONLY_TASKS[task_id] = task_payload
         
         location = "Persisted to .claude/scheduled_tasks.json" if durable else "Session-only (not written to disk)"
         
@@ -246,10 +268,10 @@ class CronCreateTool(Tool):
         schedule_file = Path(context.working_directory) / ".claude" / "scheduled_tasks.json"
         
         task_count = 0
-        if schedule_file.exists():
-            with open(schedule_file) as f:
-                tasks = json.load(f)
-                task_count = len(tasks)
+        if durable:
+            task_count = len(_load_persisted_tasks(schedule_file))
+        else:
+            task_count = len(_SESSION_ONLY_TASKS)
         
         if task_count >= MAX_JOBS:
             return CronValidationResult(

@@ -74,9 +74,11 @@ class TaskManager:
             cwd=cwd,
             env=env,
             timeout=timeout,
-            description=description or command,
             is_backgrounded=background,
         )
+
+        if description:
+            task.description = description
         
         self._tasks[task_id] = task
         
@@ -147,6 +149,7 @@ class TaskManager:
                 task.status = TaskStatus.COMPLETED
                 task.result = result
                 task.completed_at = datetime.now()
+                task.set_completed()
             
             self._emit_event(TaskEvent(
                 task_id=task_id,
@@ -158,6 +161,7 @@ class TaskManager:
             async with self._lock:
                 task.status = TaskStatus.TIMEOUT
                 task.completed_at = datetime.now()
+                task.set_completed()
             
             self._emit_event(TaskEvent(
                 task_id=task_id,
@@ -169,6 +173,7 @@ class TaskManager:
                 task.status = TaskStatus.FAILED
                 task.error = str(e)
                 task.completed_at = datetime.now()
+                task.set_completed()
             
             self._emit_event(TaskEvent(
                 task_id=task_id,
@@ -196,6 +201,7 @@ class TaskManager:
             
             task.status = TaskStatus.CANCELLED
             task.completed_at = datetime.now()
+            task.set_completed()
         
         self._emit_event(TaskEvent(
             task_id=task_id,

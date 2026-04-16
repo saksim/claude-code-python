@@ -31,6 +31,11 @@ from claude_code.tasks.shell import (
     run_background_bash,
     run_bash,
 )
+from claude_code.tasks.repository import (
+    TaskRepositoryConfig,
+    TaskRepository,
+    create_file_task_repository,
+)
 
 __all__ = [
     # Types
@@ -54,6 +59,11 @@ __all__ = [
     "ShellTaskExecutor",
     "run_background_bash",
     "run_bash",
+    
+    # Repository
+    "TaskRepositoryConfig",
+    "TaskRepository",
+    "create_file_task_repository",
 ]
 
 

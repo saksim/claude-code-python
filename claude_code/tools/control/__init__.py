@@ -90,9 +90,11 @@ class TaskStopTool(Tool):
             return ToolResult(content="Error: task_id is required", is_error=True)
         
         try:
-            from ...tasks.manager import TaskManager
-            manager = TaskManager()
-            await manager.stop_task(task_id)
+            from ...tasks.manager import get_task_manager
+            manager = get_task_manager()
+            stopped = await manager.stop_task(task_id)
+            if not stopped:
+                return ToolResult(content=f"Task not found: {task_id}", is_error=True)
             return ToolResult(content=f"Stopped task: {task_id}")
         except Exception as e:
             return ToolResult(content=f"Error: {str(e)}", is_error=True)
@@ -174,17 +176,18 @@ class TaskOutputTool(Tool):
             return ToolResult(content="Error: task_id is required", is_error=True)
         
         try:
-            from ...tasks.manager import TaskManager
-            manager = TaskManager()
+            from ...tasks.manager import get_task_manager
+            manager = get_task_manager()
             task = manager.get_task(task_id)
             
             if task is None:
                 return ToolResult(content=f"Task not found: {task_id}", is_error=True)
             
-            output = task.output or "(no output)"
+            output = task.get_output()
             
             if clear:
-                task.output = ""
+                task.result = None
+                task.error = None
             
             return ToolResult(content=output)
         except Exception as e:
@@ -261,8 +264,8 @@ class TaskControlListTool(Tool):
         status_filter = input_data.get("status", "all")
         
         try:
-            from ...tasks.manager import TaskManager
-            manager = TaskManager()
+            from ...tasks.manager import get_task_manager
+            manager = get_task_manager()
             
             tasks = manager.list_tasks()
             
@@ -276,7 +279,7 @@ class TaskControlListTool(Tool):
             for task in tasks:
                 lines.append(f"\n## {task.id}")
                 lines.append(f"Status: {task.status.value}")
-                lines.append(f"Command: {task.command[:50]}...")
+                lines.append(f"Description: {task.description}")
             
             return ToolResult(content="\n".join(lines))
         except Exception as e:

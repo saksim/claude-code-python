@@ -11,17 +11,14 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Optional, Any
 
+from claude_code.tasks.repository import create_file_task_repository
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
 
 
 # Task status values
 TASK_STATUS_OPTIONS: tuple[str, ...] = ("pending", "in_progress", "completed")
-DEFAULT_TASK_DIR: str = ".claude"
-DEFAULT_TASK_FILENAME: str = "tasks.json"
 
 
 class TaskUpdateTool(Tool):
@@ -96,42 +93,29 @@ class TaskUpdateTool(Tool):
         if not task_id:
             return ToolResult(content="Error: task_id is required", is_error=True)
         
-        task_file = Path(context.working_directory) / DEFAULT_TASK_DIR / DEFAULT_TASK_FILENAME
-        
-        if not task_file.exists():
-            return ToolResult(content="No tasks found", is_error=True)
-        
         try:
-            with open(task_file, 'r', encoding='utf-8') as f:
-                tasks: list[dict[str, Any]] = json.load(f)
-            
-            found = False
-            for task in tasks:
-                if task.get("id") == task_id:
-                    if status:
-                        task["status"] = status
-                    if title is not None:
-                        task["title"] = title
-                    if description is not None:
-                        task["description"] = description
-                    found = True
-                    break
-            
-            if not found:
+            repository = create_file_task_repository(context.working_directory)
+            updates: dict[str, Any] = {}
+            if status:
+                updates["status"] = status
+            if title is not None:
+                updates["title"] = title
+            if description is not None:
+                updates["description"] = description
+
+            task = repository.update_task(task_id, **updates)
+            if task is None:
                 return ToolResult(content=f"Task {task_id} not found", is_error=True)
             
-            with open(task_file, 'w', encoding='utf-8') as f:
-                json.dump(tasks, f, indent=2)
-            
-            updates: list[str] = []
+            update_messages: list[str] = []
             if status:
-                updates.append(f"status to {status}")
+                update_messages.append(f"status to {status}")
             if title:
-                updates.append(f"title to '{title}'")
+                update_messages.append(f"title to '{title}'")
             if description:
-                updates.append("description updated")
+                update_messages.append("description updated")
             
-            update_str = ", ".join(updates) if updates else "updated"
+            update_str = ", ".join(update_messages) if update_messages else "updated"
             return ToolResult(content=f"Task {task_id} {update_str}")
             
         except Exception as e:
