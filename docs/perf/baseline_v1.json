@@ -1,0 +1,67 @@
+{
+  "generated_at_utc": "2026-04-16T07:49:59.935167+00:00",
+  "project_root": "D:/Download/gaming/new_program/claude-code-python",
+  "python_executable": "D:/code_environment/anaconda_all_css/py311/python.exe",
+  "iterations": 20,
+  "total_duration_ms": 3186.7261999977927,
+  "syntax": {
+    "total_files": 204,
+    "syntax_errors": 0,
+    "errors": []
+  },
+  "startup": {
+    "command": [
+      "D:\\code_environment\\anaconda_all_css\\py311\\python.exe",
+      "-X",
+      "importtime",
+      "-c",
+      "import claude_code.main"
+    ],
+    "returncode": 0,
+    "wall_time_ms": 1109.3756999980542,
+    "importtime_claude_code_main_us": 982801
+  },
+  "query_engine": {
+    "name": "query_engine_single_turn_stub",
+    "count": 20,
+    "mean_ms": 0.0513700002557016,
+    "min_ms": 0.042499999835854396,
+    "max_ms": 0.1083999995898921,
+    "p50_ms": 0.044699998397845775,
+    "p95_ms": 0.07109999933163635,
+    "p99_ms": 0.07109999933163635,
+    "avg_events_per_turn": 4.0
+  },
+  "tools": {
+    "read": {
+      "name": "read_tool",
+      "count": 20,
+      "mean_ms": 0.4827299997486989,
+      "min_ms": 0.41789999886532314,
+      "max_ms": 0.6806000019423664,
+      "p50_ms": 0.4408000022522174,
+      "p95_ms": 0.5954000007477589,
+      "p99_ms": 0.5954000007477589
+    },
+    "grep": {
+      "name": "grep_tool",
+      "count": 20,
+      "mean_ms": 25.79523499989591,
+      "min_ms": 24.387800000113202,
+      "max_ms": 28.422100000170758,
+      "p50_ms": 25.3073999992921,
+      "p95_ms": 27.662799999234267,
+      "p99_ms": 27.662799999234267
+    },
+    "glob": {
+      "name": "glob_tool",
+      "count": 20,
+      "mean_ms": 11.918074999994133,
+      "min_ms": 11.016599997674348,
+      "max_ms": 13.030199999775505,
+      "p50_ms": 11.757799999031704,
+      "p95_ms": 13.002700001379708,
+      "p99_ms": 13.002700001379708
+    }
+  }
+}

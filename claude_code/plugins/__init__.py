@@ -1,25 +1,26 @@
-import warnings
-warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
-"""
-Claude Code Python - Plugin System
-插件系统基础架构 - 借鉴 TS 版本设计
-"""
+"""Claude Code Python - Plugin System."""
 
 from __future__ import annotations
 
-import asyncio
+import importlib.util
+import inspect
 import json
-from typing import Optional, Callable, Any, Awaitable
+import sys
+import warnings
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from abc import ABC, abstractmethod
-import importlib.util
-import sys
+from typing import Any, Awaitable, Callable, Optional
+
+warnings.warn(
+    f"{__name__} is deprecated and will be removed in a future version.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 class PluginType(Enum):
-    """插件类型"""
     BUILTIN = "builtin"
     LOCAL = "local"
     MARKETPLACE = "marketplace"
@@ -27,7 +28,6 @@ class PluginType(Enum):
 
 
 class PluginCapability(Enum):
-    """插件能力"""
     COMMAND = "command"
     TOOL = "tool"
     HOOK = "hook"
@@ -37,7 +37,6 @@ class PluginCapability(Enum):
 
 @dataclass
 class PluginMetadata:
-    """插件元数据"""
     id: str
     name: str
     version: str
@@ -48,243 +47,219 @@ class PluginMetadata:
     plugin_type: PluginType = PluginType.LOCAL
     capabilities: list[PluginCapability] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
-    config_schema: dict = field(default_factory=dict)
+    config_schema: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class Plugin:
-    """插件实例"""
     metadata: PluginMetadata
     root_path: Path
     enabled: bool = True
     loaded_at: Optional[str] = None
     _instance: Any = None
-    
+
     @property
     def instance(self) -> Any:
         return self._instance
-    
+
     @instance.setter
-    def instance(self, value: Any):
+    def instance(self, value: Any) -> None:
         self._instance = value
 
 
 class PluginHook(ABC):
-    """插件钩子基类"""
-    
     @abstractmethod
     async def on_load(self, plugin: Plugin) -> None:
-        """插件加载时调用"""
         pass
-    
+
     @abstractmethod
     async def on_unload(self, plugin: Plugin) -> None:
-        """插件卸载时调用"""
         pass
 
 
 class ToolPlugin(PluginHook):
-    """工具插件"""
-    
     @abstractmethod
     def get_tools(self) -> list[Any]:
-        """获取插件提供的工具"""
         pass
 
 
 class CommandPlugin(PluginHook):
-    """命令插件"""
-    
     @abstractmethod
     def get_commands(self) -> list[Any]:
-        """获取插件提供的命令"""
         pass
 
 
 class HookPlugin(PluginHook):
-    """钩子插件"""
-    
     @abstractmethod
-    def get_hooks(self) -> dict[str, Callable]:
-        """获取插件提供的钩子"""
+    def get_hooks(self) -> dict[str, list[Callable[..., Any]]]:
         pass
 
 
+async def _maybe_await(value: Any) -> None:
+    if inspect.isawaitable(value):
+        await value
+
+
 class PluginManager:
-    """
-    插件管理器
-    借鉴 TS 版本的 PluginInstallationManager 设计
-    """
-    
-    def __init__(self, working_directory: str = None):
+    """Plugin manager with loader registration + lifecycle control."""
+
+    def __init__(self, working_directory: str | None = None) -> None:
         self._working_directory = Path(working_directory or ".")
         self._plugins: dict[str, Plugin] = {}
-        self._plugin_loaders: dict[str, Callable] = {}
+        self._plugin_loaders: dict[str, Callable[[dict[str, Any]], Awaitable[Optional[Plugin]]]] = {}
         self._enabled_plugins: set[str] = set()
-    
+
     def register_loader(
         self,
         plugin_type: PluginType,
-        loader: Callable[[dict], Awaitable[Optional[Plugin]]],
+        loader: Callable[[dict[str, Any]], Awaitable[Optional[Plugin]]],
     ) -> None:
-        """注册插件加载器"""
         self._plugin_loaders[plugin_type.value] = loader
-    
-    async def load_plugin(
-        self,
-        plugin_id: str,
-        plugin_config: dict,
-    ) -> Plugin:
-        """加载插件"""
+
+    async def load_plugin(self, plugin_id: str, plugin_config: dict[str, Any]) -> Optional[Plugin]:
         if plugin_id in self._plugins:
             return self._plugins[plugin_id]
-        
+
         plugin_type = PluginType(plugin_config.get("type", "local"))
         loader = self._plugin_loaders.get(plugin_type.value)
-        
-        if loader:
-            plugin = await loader(plugin_config)
-            if plugin:
-                self._plugins[plugin_id] = plugin
-                await plugin.instance.on_load(plugin) if hasattr(plugin.instance, 'on_load') else None
-                return plugin
-        
-        return None
-    
+        if loader is None:
+            return None
+
+        plugin = await loader(plugin_config)
+        if plugin is None:
+            return None
+
+        self._plugins[plugin_id] = plugin
+        if plugin.enabled:
+            self._enabled_plugins.add(plugin_id)
+
+        hook = getattr(plugin.instance, "on_load", None)
+        if hook is not None:
+            await _maybe_await(hook(plugin))
+
+        return plugin
+
     async def unload_plugin(self, plugin_id: str) -> bool:
-        """卸载插件"""
-        if plugin_id not in self._plugins:
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
             return False
-        
-        plugin = self._plugins[plugin_id]
-        
-        if hasattr(plugin.instance, 'on_unload'):
-            await plugin.instance.on_unload(plugin)
-        
+
+        hook = getattr(plugin.instance, "on_unload", None)
+        if hook is not None:
+            await _maybe_await(hook(plugin))
+
+        self._enabled_plugins.discard(plugin_id)
         del self._plugins[plugin_id]
-        self._enabled_plugins.discard(plugin_id)
-        
         return True
-    
+
     def enable_plugin(self, plugin_id: str) -> bool:
-        """启用插件"""
-        if plugin_id not in self._plugins:
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
             return False
-        
+        plugin.enabled = True
         self._enabled_plugins.add(plugin_id)
-        self._plugins[plugin_id].enabled = True
         return True
-    
+
     def disable_plugin(self, plugin_id: str) -> bool:
-        """禁用插件"""
-        if plugin_id not in self._plugins:
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
             return False
-        
+        plugin.enabled = False
         self._enabled_plugins.discard(plugin_id)
-        self._plugins[plugin_id].enabled = False
         return True
-    
+
     def get_plugin(self, plugin_id: str) -> Optional[Plugin]:
-        """获取插件"""
         return self._plugins.get(plugin_id)
-    
+
     def list_plugins(
         self,
-        plugin_type: PluginType = None,
+        plugin_type: PluginType | None = None,
         enabled_only: bool = False,
     ) -> list[Plugin]:
-        """列出插件"""
         plugins = list(self._plugins.values())
-        
-        if plugin_type:
+        if plugin_type is not None:
             plugins = [p for p in plugins if p.metadata.plugin_type == plugin_type]
-        
         if enabled_only:
             plugins = [p for p in plugins if p.enabled]
-        
         return plugins
-    
+
     def get_all_tools(self) -> list[Any]:
-        """获取所有插件提供的工具"""
-        tools = []
+        tools: list[Any] = []
         for plugin in self.list_plugins(enabled_only=True):
-            if isinstance(plugin.instance, ToolPlugin):
-                tools.extend(plugin.instance.get_tools())
+            instance = plugin.instance
+            if isinstance(instance, ToolPlugin):
+                tools.extend(instance.get_tools())
         return tools
-    
+
     def get_all_commands(self) -> list[Any]:
-        """获取所有插件提供的命令"""
-        commands = []
+        commands: list[Any] = []
         for plugin in self.list_plugins(enabled_only=True):
-            if isinstance(plugin.instance, CommandPlugin):
-                commands.extend(plugin.instance.get_commands())
+            instance = plugin.instance
+            if isinstance(instance, CommandPlugin):
+                commands.extend(instance.get_commands())
         return commands
-    
-    def get_all_hooks(self) -> dict[str, list[Callable]]:
-        """获取所有插件提供的钩子"""
-        hooks = {}
+
+    def get_all_hooks(self) -> dict[str, list[Callable[..., Any]]]:
+        hooks: dict[str, list[Callable[..., Any]]] = {}
         for plugin in self.list_plugins(enabled_only=True):
-            if isinstance(plugin.instance, HookPlugin):
-                plugin_hooks = plugin.instance.get_hooks()
+            instance = plugin.instance
+            if isinstance(instance, HookPlugin):
+                plugin_hooks = instance.get_hooks()
                 for event, handlers in plugin_hooks.items():
-                    if event not in hooks:
-                        hooks[event] = []
-                    hooks[event].extend(handlers)
+                    hooks.setdefault(event, []).extend(handlers)
         return hooks
 
 
 class BuiltinPluginLoader:
-    """内置插件加载器"""
-    
+    """Load built-in plugin modules from file path."""
+
     @staticmethod
-    async def load(config: dict) -> Optional[Plugin]:
-        """加载内置插件"""
+    async def load(config: dict[str, Any]) -> Optional[Plugin]:
         plugin_id = config.get("id")
         plugin_path = config.get("path")
-        
-        if not plugin_path:
+        if not plugin_id or not plugin_path:
             return None
-        
+
         spec = importlib.util.spec_from_file_location(plugin_id, plugin_path)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[plugin_id] = module
-            spec.loader.exec_module(module)
-            
-            if hasattr(module, "get_plugin"):
-                plugin_instance = module.get_plugin()
-                return Plugin(
-                    metadata=PluginMetadata(
-                        id=plugin_id,
-                        name=config.get("name", plugin_id),
-                        version=config.get("version", "1.0.0"),
-                        description=config.get("description", ""),
-                        plugin_type=PluginType.BUILTIN,
-                    ),
-                    root_path=Path(plugin_path),
-                    _instance=plugin_instance,
-                )
-        
-        return None
+        if spec is None or spec.loader is None:
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[plugin_id] = module
+        spec.loader.exec_module(module)
+
+        if not hasattr(module, "get_plugin"):
+            return None
+
+        plugin_instance = module.get_plugin()
+        return Plugin(
+            metadata=PluginMetadata(
+                id=plugin_id,
+                name=config.get("name", plugin_id),
+                version=config.get("version", "1.0.0"),
+                description=config.get("description", ""),
+                plugin_type=PluginType.BUILTIN,
+            ),
+            root_path=Path(plugin_path),
+            _instance=plugin_instance,
+        )
 
 
 class LocalPluginLoader:
-    """本地插件加载器"""
-    
+    """Load local plugins from plugin.json."""
+
     @staticmethod
-    async def load(config: dict) -> Optional[Plugin]:
-        """加载本地插件"""
+    async def load(config: dict[str, Any]) -> Optional[Plugin]:
         plugin_id = config.get("id")
+        if not plugin_id:
+            return None
+
         plugin_path = Path(config.get("path", f"./plugins/{plugin_id}"))
-        
         metadata_file = plugin_path / "plugin.json"
-        
         if not metadata_file.exists():
             return None
-        
-        with open(metadata_file) as f:
-            metadata = json.load(f)
-        
+
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
         return Plugin(
             metadata=PluginMetadata(
                 id=metadata.get("id", plugin_id),
@@ -299,13 +274,14 @@ class LocalPluginLoader:
 
 
 class MCPPluginLoader:
-    """MCP 插件加载器"""
-    
+    """Placeholder MCP plugin loader."""
+
     @staticmethod
-    async def load(config: dict) -> Optional[Plugin]:
-        """加载 MCP 插件"""
+    async def load(config: dict[str, Any]) -> Optional[Plugin]:
         plugin_id = config.get("id")
-        
+        if not plugin_id:
+            return None
+
         return Plugin(
             metadata=PluginMetadata(
                 id=plugin_id,
@@ -319,14 +295,11 @@ class MCPPluginLoader:
         )
 
 
-def create_plugin_manager(working_directory: str = None) -> PluginManager:
-    """创建插件管理器"""
+def create_plugin_manager(working_directory: str | None = None) -> PluginManager:
     manager = PluginManager(working_directory)
-    
     manager.register_loader(PluginType.BUILTIN, BuiltinPluginLoader.load)
     manager.register_loader(PluginType.LOCAL, LocalPluginLoader.load)
     manager.register_loader(PluginType.MCP, MCPPluginLoader.load)
-    
     return manager
 
 
@@ -334,7 +307,6 @@ _default_manager: Optional[PluginManager] = None
 
 
 def get_plugin_manager() -> PluginManager:
-    """获取默认插件管理器"""
     global _default_manager
     if _default_manager is None:
         _default_manager = create_plugin_manager()
