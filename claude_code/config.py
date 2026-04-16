@@ -37,11 +37,27 @@ DEFAULT_COMPACT_THRESHOLD: int = 150000
 from claude_code.permissions import PermissionMode, PERMISSION_MODES
 
 # Constant sets using frozenset
-VALID_PROVIDERS: frozenset[str] = frozenset({"anthropic", "bedrock", "vertex", "azure"})
+VALID_PROVIDERS: frozenset[str] = frozenset({"anthropic", "openai", "bedrock", "vertex", "azure"})
 VALID_PERMISSION_MODES: frozenset[str] = frozenset(PERMISSION_MODES)
 SUPPORTED_AWS_REGIONS: frozenset[str] = frozenset({
     "us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1", "ap-northeast-1"
 })
+
+
+def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep-merge two dictionaries.
+    
+    Nested dictionaries are merged recursively. Non-dict values from
+    ``override`` replace values in ``base``.
+    """
+    merged: dict[str, Any] = dict(base)
+    for key, value in override.items():
+        base_value = merged.get(key)
+        if isinstance(base_value, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(base_value, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 class APIConfig(BaseModel):
@@ -246,13 +262,14 @@ class Config(BaseModel):
         if environment is None:
             environment = os.getenv("CLAUDE_ENV", "default")
         
-        # Start with default config
-        config = cls()
+        # Start with default config data
+        default_config = cls()
+        merged_data: dict[str, Any] = default_config.model_dump()
         
         # Load and merge configuration files in order
         config_files = [
-            config.config_dir / "base.json",
-            config.config_dir / f"{environment}.json",
+            default_config.config_dir / "base.json",
+            default_config.config_dir / f"{environment}.json",
             path,  # config.json
         ]
         
@@ -261,9 +278,14 @@ class Config(BaseModel):
                 try:
                     with open(config_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    config = cls.from_dict(data)
+                    if isinstance(data, dict):
+                        merged_data = _deep_merge_dict(merged_data, data)
+                    else:
+                        logger.warning(f"Config file {config_file} is not a JSON object, skipping")
                 except Exception as e:
                     logger.warning(f"Failed to load config from {config_file}: {e}")
+        
+        config = cls.from_dict(merged_data)
         
         # Apply environment variables (highest priority)
         config.update_from_env()

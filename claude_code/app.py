@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 # Import DI container
 from claude_code.di.container import (

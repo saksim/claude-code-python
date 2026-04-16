@@ -11,7 +11,7 @@ Following TOP Python Dev standards:
 
 import asyncio
 import os
-from typing import Any, Optional
+from typing import Optional
 
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
 
@@ -177,84 +177,3 @@ class BashTool(Tool):
                 content="Error: {}".format(str(e)),
                 is_error=True
             )
-
-
-class PowerShellTool(Tool):
-    """Tool to execute PowerShell commands asynchronously."""
-    
-    @property
-    def name(self) -> str:
-        """Tool name."""
-        return "powershell"
-    
-    @property
-    def description(self) -> str:
-        """Human-readable description."""
-        return "Execute a PowerShell command and return the output"
-    
-    @property
-    def input_schema(self) -> dict:
-        """JSON Schema for tool input."""
-        return {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The PowerShell command to execute"
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Timeout in seconds",
-                    "default": 60
-                },
-                "working_directory": {
-                    "type": "string",
-                    "description": "Directory to run command in"
-                }
-            },
-            "required": ["command"]
-        }
-    
-    def is_read_only(self) -> bool:
-        """PowerShell can run any command, not read-only."""
-        return False
-    
-    async def execute(
-        self,
-        input_data: dict,
-        context: ToolContext,
-        on_progress: Optional[ToolCallback] = None,
-    ) -> ToolResult:
-        """Execute a PowerShell command asynchronously.
-        
-        Args:
-            input_data: Dictionary with 'command' and optional 'timeout'.
-            context: Tool execution context.
-            on_progress: Optional progress callback.
-            
-        Returns:
-            ToolResult with command output or error.
-        """
-        command: str = input_data.get("command", "")
-        timeout: int = input_data.get("timeout", 60)
-        
-        if not command:
-            return ToolResult(
-                content="Error: command is required",
-                is_error=True
-            )
-        
-        # PowerShell command prefix
-        ps_command = "powershell -NoProfile -ExecutionPolicy Bypass -Command \"{}\"".format(
-            command.replace("\"", "\\\"")
-        )
-        
-        # Use BashTool to execute
-        bash_tool = BashTool()
-        result = await bash_tool.execute(
-            {"command": ps_command, "timeout": timeout},
-            context,
-            on_progress
-        )
-        
-        return result

@@ -171,49 +171,64 @@ class ShutdownManager:
         )
 
 
-# Context manager for application lifecycle
-class Application:
-    """Context manager for application lifecycle.
-
-    Usage:
-        async with Application() as app:
-            # Application is running
-            await app.run()
-        # Automatic cleanup on exit
+# Context manager for shutdown-focused application lifecycle
+class ShutdownApplication:
+    """Compatibility wrapper around the unified app lifecycle implementation.
+    
+    The canonical lifecycle now lives in ``claude_code.app.Application``.
+    This class is retained for backward compatibility.
     """
 
     def __init__(self, shutdown_config: Optional[ShutdownConfig] = None):
-        """Initialize application.
+        self._shutdown_config = shutdown_config
+        self._delegate = None
 
-        Args:
-            shutdown_config: Shutdown configuration.
-        """
-        self.shutdown_manager = ShutdownManager(shutdown_config)
-        self._running = False
+    def _get_delegate(self):
+        """Lazily resolve canonical application to avoid import cycles."""
+        if self._delegate is None:
+            from claude_code.app import Application as CanonicalApplication
+            self._delegate = CanonicalApplication()
+        return self._delegate
 
-    async def __aenter__(self) -> "Application":
-        """Enter application context."""
-        await self.shutdown_manager.start()
-        self._running = True
-        return self
+    async def __aenter__(self):
+        """Enter application context via canonical application."""
+        delegate = self._get_delegate()
+        app = await delegate.__aenter__()
+
+        # Apply explicit shutdown overrides when provided.
+        if self._shutdown_config and getattr(app, "_shutdown_manager", None):
+            manager = app._shutdown_manager
+            manager.config.timeout = self._shutdown_config.timeout
+            manager.config.force_after = self._shutdown_config.force_after
+            if self._shutdown_config.on_shutdown is not None:
+                manager.config.on_shutdown = self._shutdown_config.on_shutdown
+            if self._shutdown_config.on_cleanup is not None:
+                manager.config.on_cleanup = self._shutdown_config.on_cleanup
+
+        return app
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit application context and cleanup."""
-        self._running = False
-        if exc_type is not None:
-            # Unexpected error - still try to shutdown gracefully
-            await self.shutdown_manager.shutdown(reason=f"Error: {exc_val}")
-        else:
-            await self.shutdown_manager.shutdown(reason="Normal exit")
+        """Exit application context and cleanup via canonical application."""
+        delegate = self._get_delegate()
+        await delegate.__aexit__(exc_type, exc_val, exc_tb)
 
     async def run(self) -> None:
-        """Run the application (to be overridden)."""
-        while self._running:
-            await asyncio.sleep(1)
+        """Run canonical application loop."""
+        await self._get_delegate().run()
 
     def stop(self) -> None:
-        """Stop the application."""
-        self._running = False
+        """Stop canonical application."""
+        self._get_delegate().stop()
+
+    @property
+    def shutdown_manager(self) -> Optional[ShutdownManager]:
+        """Expose delegate shutdown manager for compatibility."""
+        delegate = self._get_delegate()
+        return getattr(delegate, "_shutdown_manager", None)
+
+
+# Backward-compatible alias (legacy import path)
+Application = ShutdownApplication
 
 
 # Global shutdown manager

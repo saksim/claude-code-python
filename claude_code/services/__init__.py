@@ -144,9 +144,12 @@ from claude_code.services.shutdown import (
     ShutdownManager,
     ShutdownConfig,
     ShutdownPhase,
-    Application,
+    ShutdownApplication,
     get_shutdown_manager,
 )
+
+# Backward-compatible alias for older imports.
+Application = ShutdownApplication
 
 from claude_code.services.event_bus import (
     EventBus,
@@ -295,6 +298,7 @@ __all__ = [
     "ShutdownManager",
     "ShutdownConfig",
     "ShutdownPhase",
+    "ShutdownApplication",
     "Application",
     "get_shutdown_manager",
     

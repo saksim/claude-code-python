@@ -16,28 +16,44 @@ import os
 import sys
 import asyncio
 import argparse
+import io
 from typing import Optional
-
-# Fix Windows console encoding for Rich
-if sys.platform == "win32":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from claude_code.api.client import APIClient, APIClientConfig, APIProvider
 from claude_code.engine.query import QueryEngine, QueryConfig
-from claude_code.engine.context import ContextBuilder, PermissionMode, PermissionContext
+from claude_code.engine.context import ContextBuilder
 from claude_code.repl import REPL, REPLConfig, PipeMode
 from claude_code.tools.registry import create_default_registry
 from claude_code.commands.registry import setup_default_commands
-from claude_code.config import get_config, Config
+from claude_code.config import get_config
+
+
+def _configure_windows_console_encoding() -> None:
+    """Configure UTF-8 console streams on Windows for CLI execution.
+    
+    This is intentionally invoked from ``main()`` instead of module import
+    to avoid side-effects in test runners and library imports.
+    """
+    if sys.platform != "win32":
+        return
+    
+    if hasattr(sys.stdout, "buffer"):
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "buffer"):
+        try:
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 
 def setup_api_client() -> APIClient:
     """Setup the API client based on environment.
     
     Reads from environment variables:
-    - CLAUDE_API_PROVIDER: anthropic/bedrock/vertex/azure
+    - CLAUDE_API_PROVIDER: anthropic/openai/ollama/vllm/deepseek/bedrock/vertex/azure
     - ANTHROPIC_API_KEY: API key for Anthropic
     - AWS_REGION, AWS_PROFILE: For Bedrock
     - VERTEX_PROJECT, VERTEX_LOCATION: For Vertex
@@ -58,6 +74,24 @@ def setup_api_client() -> APIClient:
             provider=APIProvider.ANTHROPIC,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         )
+    elif provider in ("openai", "ollama", "vllm", "deepseek"):
+        default_urls = {
+            "ollama": "http://localhost:11434/v1",
+            "vllm": "http://localhost:8000/v1",
+            "deepseek": "https://api.deepseek.com/v1",
+        }
+        base_url = os.getenv("OPENAI_BASE_URL") or default_urls.get(provider)
+        api_key = os.getenv("OPENAI_API_KEY")
+        if provider in ("openai", "deepseek") and not api_key:
+            raise ValueError(
+                f"{provider} provider requires OPENAI_API_KEY to be set. "
+                "For local models, use CLAUDE_API_PROVIDER=ollama or vllm."
+            )
+        config = APIClientConfig(
+            provider=APIProvider.OPENAI,
+            api_key=api_key or "dummy",
+            base_url=base_url,
+        )
     elif provider == "bedrock":
         config = APIClientConfig(
             provider=APIProvider.AWS_BEDROCK,
@@ -71,11 +105,9 @@ def setup_api_client() -> APIClient:
             vertex_location=os.getenv("VERTEX_LOCATION", "us-central1"),
         )
     elif provider == "azure":
-        config = APIClientConfig(
-            provider=APIProvider.AZURE,
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            azure_api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-01-01"),
-            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        raise ValueError(
+            "Azure provider is temporarily unavailable in this build. "
+            "Use anthropic/bedrock/vertex provider until azure adapter is fully wired."
         )
     else:
         raise ValueError(f"Unknown provider: {provider}")
@@ -217,6 +249,38 @@ async def run_pipe_mode(
     return await pipe.run()
 
 
+async def run_single_query(
+    query: str,
+    model: Optional[str] = None,
+    verbose: bool = False,
+    system: Optional[str] = None,
+) -> int:
+    """Run a single query and print result to stdout."""
+    engine = create_engine(model=model)
+    if system:
+        engine.config.system_prompt = system
+    
+    output_parts: list[str] = []
+    try:
+        async for event in engine.query(query):
+            if isinstance(event, dict) and event.get("type") == "text":
+                output_parts.append(str(event.get("content", "")))
+            elif hasattr(event, "role") and getattr(event, "role", None) == "assistant":
+                content = getattr(event, "content", "")
+                if isinstance(content, str):
+                    output_parts.append(content)
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            output_parts.append(str(block.get("text", "")))
+        if output_parts:
+            print("".join(output_parts))
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 async def run_doctor() -> None:
     """Run health check / diagnostics.
     
@@ -280,6 +344,8 @@ def main() -> None:
     - Doctor mode (--doctor flag)
     - Init mode (--init flag)
     """
+    _configure_windows_console_encoding()
+    
     parser = argparse.ArgumentParser(
         description="Claude Code Python - AI Programming Assistant",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -394,11 +460,13 @@ def main() -> None:
     
     if query:
         # Single query mode
-        asyncio.run(run_repl(
+        exit_code = asyncio.run(run_single_query(
+            query=query,
             model=args.model,
             verbose=args.verbose,
             system=args.system,
         ))
+        sys.exit(exit_code)
     else:
         # Interactive REPL
         asyncio.run(run_repl(

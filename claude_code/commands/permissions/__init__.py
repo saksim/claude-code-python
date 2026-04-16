@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from claude_code.commands.base import Command, CommandContext, CommandResult, CommandType
-from claude_code.services.permissions_manager import PermissionMode
+from claude_code.permissions import PermissionMode
 from claude_code.config import get_config, LocalSettings
 
 
