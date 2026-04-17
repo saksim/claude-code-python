@@ -163,6 +163,18 @@ A Python implementation of an AI programming assistant.
         """
         return re.sub(r"\x1b\[[0-9;]*m", "", content)
 
+    def _extract_text_content(self, content: Any) -> str:
+        """Extract plain text from assistant content blocks."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(str(block.get("text", "")))
+            return "".join(parts)
+        return str(content)
+
     def display_message(self, role: str, content: str) -> None:
         """Display a message in the chat.
 
@@ -304,8 +316,8 @@ A Python implementation of an AI programming assistant.
 
         elif hasattr(event, "role"):
             if event.role == "assistant":
-                content = event.content
-                if isinstance(content, str):
+                content = self._extract_text_content(event.content)
+                if content:
                     self._console.print(Markdown(content))
 
         elif hasattr(event, "name"):
@@ -348,7 +360,13 @@ class PipeMode:
                 if isinstance(event, dict) and event.get("type") == "text":
                     response_parts.append(event.get("content", ""))
                 elif hasattr(event, "content"):
-                    response_parts.append(str(event.content))
+                    content = event.content
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                response_parts.append(str(block.get("text", "")))
+                    else:
+                        response_parts.append(str(content))
 
             sys.stdout.write("".join(response_parts))
             sys.stdout.flush()

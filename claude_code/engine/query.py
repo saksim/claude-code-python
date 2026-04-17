@@ -26,6 +26,7 @@ from claude_code.api.client import (
 )
 from claude_code.tools import Tool, ToolRegistry, ToolContext, ToolResult, ToolDefinition
 from claude_code.tools.registry import create_default_registry
+from claude_code.permissions import create_permission_checker
 
 
 class StopReason(Enum):
@@ -202,6 +203,30 @@ class QueryEngine:
         # Stream handling
         self._stream_task: Optional[asyncio.Task] = None
         self._streaming = False
+        
+        # Ensure model-visible tool list is populated from registry by default.
+        self._ensure_configured_tools()
+    
+    def _ensure_configured_tools(self) -> None:
+        """Populate query config tools from registry when not explicitly set."""
+        if self.config.tools:
+            return
+        
+        configured: list[Tool] = []
+        seen: set[str] = set()
+        for tool_name in self.tool_registry.get_names():
+            if tool_name in seen:
+                continue
+            seen.add(tool_name)
+            try:
+                tool = self.tool_registry.get(tool_name)
+            except Exception:
+                # Skip tools that fail to initialize lazily.
+                continue
+            if tool is not None:
+                configured.append(tool)
+        
+        self.config.tools = configured
     
     async def query(
         self,
@@ -284,6 +309,7 @@ class QueryEngine:
                 
                 # Add to conversation
                 self.messages.append(assistant_message)
+                api_messages.append(assistant_message.to_param())
                 yield assistant_message
                 
                 # Extract tool uses
@@ -375,48 +401,102 @@ class QueryEngine:
     def _create_tool_result_message(self, result: ToolCallResult) -> Message:
         """Create a message for a tool result."""
         content = result.result.content
+        blocks: list[dict[str, Any]] = []
         if isinstance(content, list):
-            # Format as tool_result blocks
-            blocks = []
             for item in content:
-                if isinstance(item, dict):
+                if isinstance(item, dict) and "content" in item:
                     blocks.append({
                         "type": "tool_result",
                         "tool_use_id": result.tool_use.id,
-                        "content": item.get("content", str(item)),
+                        "content": item.get("content", ""),
                         "is_error": result.result.is_error,
                     })
-            content = blocks
+                else:
+                    blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": result.tool_use.id,
+                        "content": str(item),
+                        "is_error": result.result.is_error,
+                    })
         else:
-            content = str(content)
+            blocks.append({
+                "type": "tool_result",
+                "tool_use_id": result.tool_use.id,
+                "content": str(content),
+                "is_error": result.result.is_error,
+            })
         
         return Message(
             id=str(uuid4()),
             role="user",
-            content=content,
+            content=blocks,
             tool_call_id=result.tool_use.id,
             name=result.tool_use.name,
         )
     
+    def _normalize_content_block(self, block: Any) -> Optional[dict[str, Any]]:
+        """Normalize provider-specific content blocks to a dict format."""
+        if isinstance(block, dict):
+            block_type = block.get("type")
+            if block_type == "text":
+                return {"type": "text", "text": block.get("text", "")}
+            if block_type == "tool_use":
+                return {
+                    "type": "tool_use",
+                    "id": block.get("id", str(uuid4())),
+                    "name": block.get("name", ""),
+                    "input": block.get("input", {}),
+                }
+            return block
+        
+        block_type = getattr(block, "type", None)
+        if block_type == "text":
+            return {"type": "text", "text": getattr(block, "text", "")}
+        if block_type == "tool_use":
+            return {
+                "type": "tool_use",
+                "id": getattr(block, "id", str(uuid4())),
+                "name": getattr(block, "name", ""),
+                "input": getattr(block, "input", {}) or {},
+            }
+        
+        if hasattr(block, "name") and hasattr(block, "input"):
+            return {
+                "type": "tool_use",
+                "id": getattr(block, "id", str(uuid4())),
+                "name": getattr(block, "name", ""),
+                "input": getattr(block, "input", {}) or {},
+            }
+        
+        text_value = getattr(block, "text", None)
+        if text_value is not None:
+            return {"type": "text", "text": str(text_value)}
+        
+        return None
+    
     def _parse_assistant_message(self, content: Any) -> Message:
         """Parse assistant message from API response."""
-        if hasattr(content, '__iter__'):
-            # Handle list of content blocks
-            text_parts = []
+        parsed_content: str | list[dict[str, Any]]
+        if isinstance(content, list):
+            normalized_blocks: list[dict[str, Any]] = []
+            text_parts: list[str] = []
             for block in content:
-                if hasattr(block, 'text'):
-                    text_parts.append(block.text)
-                elif isinstance(block, dict) and block.get('type') == 'text':
-                    text_parts.append(block.get('text', ''))
-            
-            text = ''.join(text_parts)
+                normalized = self._normalize_content_block(block)
+                if normalized is None:
+                    continue
+                normalized_blocks.append(normalized)
+                if normalized.get("type") == "text":
+                    text_parts.append(str(normalized.get("text", "")))
+            parsed_content = normalized_blocks if normalized_blocks else "".join(text_parts)
+        elif isinstance(content, dict) and isinstance(content.get("content"), list):
+            return self._parse_assistant_message(content["content"])
         else:
-            text = str(content)
+            parsed_content = str(content)
         
         return Message(
             id=str(uuid4()),
             role="assistant",
-            content=text,
+            content=parsed_content,
         )
     
     def _extract_tool_uses(self, message: Message) -> list[ToolUse]:
@@ -430,18 +510,14 @@ class QueryEngine:
         
         if isinstance(content, list):
             for block in content:
-                if isinstance(block, dict):
-                    if block.get('type') == 'tool_use':
-                        tool_uses.append(ToolUse(
-                            id=block.get('id', str(uuid4())),
-                            name=block.get('name', ''),
-                            input=block.get('input', {}),
-                        ))
-                elif hasattr(block, 'name'):
+                normalized = self._normalize_content_block(block)
+                if not normalized:
+                    continue
+                if normalized.get("type") == "tool_use":
                     tool_uses.append(ToolUse(
-                        id=getattr(block, 'id', str(uuid4())),
-                        name=block.name,
-                        input=block.input or {},
+                        id=normalized.get("id", str(uuid4())),
+                        name=normalized.get("name", ""),
+                        input=normalized.get("input", {}) or {},
                     ))
         
         return tool_uses
@@ -498,6 +574,22 @@ class QueryEngine:
             model=self.config.model,
             session_id=self.config.session_id or self.conversation_id,
         )
+        
+        permission_checker = create_permission_checker(
+            mode=self.config.permission_mode,
+            always_allow=list(self.config.always_allow),
+            always_deny=list(self.config.always_deny),
+        )
+        if not permission_checker.can_execute(tool_use.name):
+            return ToolCallResult(
+                tool_use=tool_use,
+                result=ToolResult(
+                    content=f"Permission denied for tool: {tool_use.name} (mode={context.permission_mode})",
+                    is_error=True,
+                    tool_use_id=tool_use.id,
+                ),
+                duration_ms=(time.time() - start_time) * 1000,
+            )
         
         try:
             # Validate input
@@ -571,7 +663,7 @@ class QueryEngine:
     
     def set_permission_mode(self, mode):
         """Set the permission mode."""
-        self.permission_mode = mode.value if hasattr(mode, 'value') else str(mode)
+        self.config.permission_mode = mode.value if hasattr(mode, 'value') else str(mode)
     
     def get_tasks(self) -> list[dict]:
         """Get current tasks."""
@@ -596,6 +688,13 @@ class QueryEngine:
                 content = msg.content
                 if isinstance(content, str):
                     return content
+                if isinstance(content, list):
+                    parts: list[str] = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            parts.append(str(block.get("text", "")))
+                    if parts:
+                        return "".join(parts)
         return None
     
     async def compact(self, custom_instructions: Optional[str] = None) -> dict:

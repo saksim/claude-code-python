@@ -9,12 +9,11 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
-import json
 import uuid
 from pathlib import Path
-from typing import Any
 
 from claude_code.commands.base import Command, CommandContext, CommandResult, CommandType
+from claude_code.tasks.repository import create_file_task_repository
 
 
 class TasksCommand(Command):
@@ -84,18 +83,21 @@ class TasksCommand(Command):
         if not tasks_file.exists():
             return CommandResult(content="No tasks found")
         
-        with open(tasks_file, encoding="utf-8") as f:
-            tasks: dict[str, Any] = json.load(f)
+        repository = create_file_task_repository(context.working_directory)
+        tasks = repository.list_tasks()
         
         if not tasks:
             return CommandResult(content="No tasks found")
         
         lines: list[str] = ["# Tasks\n"]
         
-        for task_id, task in tasks.items():
+        for task in tasks:
+            task_id = str(task.get("id", "N/A"))
             status = task.get("status", "pending")
+            title = task.get("title", "Untitled")
             desc = task.get("description", "")
-            lines.append(f"\n## {task_id}: {status}")
+            lines.append(f"\n## {task_id}: {title}")
+            lines.append(f"Status: {status}")
             lines.append(f"Description: {desc}")
         
         return CommandResult(content="\n".join(lines))
@@ -113,21 +115,15 @@ class TasksCommand(Command):
         tasks_file = Path(context.working_directory) / ".claude" / "tasks.json"
         tasks_file.parent.mkdir(exist_ok=True)
         
-        tasks: dict[str, Any] = {}
-        if tasks_file.exists():
-            with open(tasks_file, encoding="utf-8") as f:
-                tasks = json.load(f)
-        
         task_id = str(uuid.uuid4())[:8]
-        
-        tasks[task_id] = {
-            "description": description,
-            "status": "pending",
-            "created_at": None,
-        }
-        
-        with open(tasks_file, "w", encoding="utf-8") as f:
-            json.dump(tasks, f, indent=2)
+        repository = create_file_task_repository(context.working_directory)
+        repository.create_task(
+            title=description[:60],
+            description=description,
+            status="pending",
+            task_id=task_id,
+            created_at=None,
+        )
         
         return CommandResult(content=f"Created task: {task_id}")
     
@@ -146,16 +142,10 @@ class TasksCommand(Command):
         if not tasks_file.exists():
             return CommandResult(success=False, error="No tasks found")
         
-        with open(tasks_file, encoding="utf-8") as f:
-            tasks: dict[str, Any] = json.load(f)
-        
-        if task_id not in tasks:
+        repository = create_file_task_repository(context.working_directory)
+        task = repository.update_task(task_id, status="completed")
+        if task is None:
             return CommandResult(success=False, error=f"Task not found: {task_id}")
-        
-        tasks[task_id]["status"] = "completed"
-        
-        with open(tasks_file, "w", encoding="utf-8") as f:
-            json.dump(tasks, f, indent=2)
         
         return CommandResult(content=f"Completed task: {task_id}")
     
@@ -174,16 +164,9 @@ class TasksCommand(Command):
         if not tasks_file.exists():
             return CommandResult(success=False, error="No tasks found")
         
-        with open(tasks_file, encoding="utf-8") as f:
-            tasks: dict[str, Any] = json.load(f)
-        
-        if task_id not in tasks:
+        repository = create_file_task_repository(context.working_directory)
+        if not repository.delete_task(task_id):
             return CommandResult(success=False, error=f"Task not found: {task_id}")
-        
-        del tasks[task_id]
-        
-        with open(tasks_file, "w", encoding="utf-8") as f:
-            json.dump(tasks, f, indent=2)
         
         return CommandResult(content=f"Removed task: {task_id}")
 

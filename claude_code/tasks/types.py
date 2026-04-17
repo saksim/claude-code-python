@@ -224,28 +224,47 @@ def create_task_from_dict(data: dict) -> Task:
     task_type = TaskType(data.get("type", "local_bash"))
     
     if task_type == TaskType.LOCAL_BASH:
-        return BashTask(
+        task = BashTask(
             id=data["id"],
             command=data.get("command", ""),
             cwd=data.get("cwd"),
             env=data.get("env"),
             timeout=data.get("timeout"),
             status=TaskStatus(data.get("status", "pending")),
-            description=data.get("description", ""),
+            error=data.get("error"),
+            is_backgrounded=data.get("is_backgrounded", True),
+            parent_id=data.get("parent_id"),
+            tags=data.get("tags", []),
+            metadata=data.get("metadata", {}),
         )
+        if desc := data.get("description"):
+            task.description = desc
+        return task
     elif task_type == TaskType.LOCAL_AGENT:
-        return AgentTask(
+        task = AgentTask(
             id=data["id"],
             prompt=data.get("prompt", ""),
             model=data.get("model"),
             tools=data.get("tools"),
             status=TaskStatus(data.get("status", "pending")),
-            description=data.get("description", ""),
+            error=data.get("error"),
+            is_backgrounded=data.get("is_backgrounded", True),
+            parent_id=data.get("parent_id"),
+            tags=data.get("tags", []),
+            metadata=data.get("metadata", {}),
         )
+        if desc := data.get("description"):
+            task.description = desc
+        return task
     else:
         return Task(
             id=data["id"],
             type=task_type,
             status=TaskStatus(data.get("status", "pending")),
             description=data.get("description", ""),
+            error=data.get("error"),
+            is_backgrounded=data.get("is_backgrounded", True),
+            parent_id=data.get("parent_id"),
+            tags=data.get("tags", []),
+            metadata=data.get("metadata", {}),
         )

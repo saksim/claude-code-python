@@ -17,6 +17,15 @@ from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Any, Optional
 from dataclasses import dataclass
 
+from claude_code.api.client import (
+    APIClient,
+    APIClientConfig,
+    APIProvider,
+    MessageParam,
+    QueryOptions,
+    ToolParam,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ChatMessage:
@@ -138,6 +147,157 @@ class BaseLLMAdapter(ABC):
         pass
 
 
+class APIClientAdapter(BaseLLMAdapter):
+    """Adapter that exposes ``APIClient`` behind the LLM adapter interface."""
+    
+    def __init__(
+        self,
+        provider: str,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: str = "claude-sonnet-4-20250514",
+        **kwargs,
+    ) -> None:
+        super().__init__(api_key=api_key, base_url=base_url, model=model, **kwargs)
+        self._provider = provider.lower()
+        self._client = APIClient(self._build_client_config(self._provider, kwargs))
+    
+    @property
+    def provider(self) -> str:
+        return self._provider
+    
+    def _build_client_config(self, provider: str, kwargs: dict[str, Any]) -> APIClientConfig:
+        if provider == "anthropic":
+            return APIClientConfig(
+                api_key=self._api_key,
+                provider=APIProvider.ANTHROPIC,
+                base_url=self._base_url,
+            )
+        if provider in ("openai", "ollama", "vllm", "deepseek"):
+            default_urls = {
+                "ollama": "http://localhost:11434/v1",
+                "vllm": "http://localhost:8000/v1",
+                "deepseek": "https://api.deepseek.com/v1",
+            }
+            resolved_base_url = self._base_url or default_urls.get(provider)
+            return APIClientConfig(
+                api_key=self._api_key or "dummy",
+                provider=APIProvider.OPENAI,
+                base_url=resolved_base_url,
+            )
+        if provider == "bedrock":
+            return APIClientConfig(
+                api_key=self._api_key,
+                provider=APIProvider.AWS_BEDROCK,
+                aws_region=kwargs.get("aws_region", "us-east-1"),
+                aws_profile=kwargs.get("aws_profile"),
+            )
+        if provider == "vertex":
+            return APIClientConfig(
+                api_key=self._api_key,
+                provider=APIProvider.GOOGLE_VERTEX,
+                vertex_project=kwargs.get("vertex_project"),
+                vertex_location=kwargs.get("vertex_location", "us-central1"),
+            )
+        if provider == "azure":
+            return APIClientConfig(
+                api_key=self._api_key,
+                provider=APIProvider.AZURE,
+                base_url=self._base_url,
+                azure_endpoint=kwargs.get("azure_endpoint") or self._base_url,
+                azure_api_version=kwargs.get("api_version", "2024-02-15-preview"),
+            )
+        
+        known = ["anthropic", "openai", "ollama", "vllm", "deepseek", "bedrock", "vertex", "azure"]
+        raise ValueError(f"Unknown provider: '{provider}'. Known providers: {', '.join(known)}")
+    
+    @staticmethod
+    def _to_message_params(messages: list[ChatMessage]) -> list[MessageParam]:
+        return [MessageParam(role=m.role, content=m.content) for m in messages]
+    
+    @staticmethod
+    def _to_tool_params(tools: Optional[list[ToolDefinition]]) -> list[ToolParam]:
+        return [
+            ToolParam(name=t.name, description=t.description, input_schema=t.input_schema)
+            for t in (tools or [])
+        ]
+    
+    @staticmethod
+    def _extract_text_from_content(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(str(block.get("text", "")))
+                elif hasattr(block, "type") and getattr(block, "type", None) == "text":
+                    parts.append(str(getattr(block, "text", "")))
+                elif hasattr(block, "text"):
+                    parts.append(str(getattr(block, "text", "")))
+            return "".join(parts)
+        return str(content)
+    
+    async def chat(
+        self,
+        messages: list[ChatMessage],
+        model: Optional[str] = None,
+        tools: Optional[list[ToolDefinition]] = None,
+        max_tokens: int = 8192,
+        temperature: Optional[float] = None,
+        system: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        options = QueryOptions(
+            model=model or self._model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=self._to_tool_params(tools),
+            system=system,
+        )
+        async for event in self._client.create_message_streaming(self._to_message_params(messages), options):
+            if event.type == "text" and event.content:
+                yield str(event.content.get("text", ""))
+            elif event.type == "message" and event.content:
+                content = event.content.get("content")
+                text = self._extract_text_from_content(content)
+                if text:
+                    yield text
+            elif event.type == "error":
+                raise RuntimeError(event.error or "unknown streaming error")
+    
+    async def chat_once(
+        self,
+        messages: list[ChatMessage],
+        model: Optional[str] = None,
+        tools: Optional[list[ToolDefinition]] = None,
+        max_tokens: int = 8192,
+        temperature: Optional[float] = None,
+        system: Optional[str] = None,
+    ) -> tuple[str, UsageInfo]:
+        options = QueryOptions(
+            model=model or self._model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=self._to_tool_params(tools),
+            system=system,
+        )
+        response = await self._client.create_message(self._to_message_params(messages), options)
+        text = self._extract_text_from_content(getattr(response, "content", ""))
+        usage_raw = getattr(response, "usage", None)
+        if isinstance(usage_raw, dict):
+            input_tokens = int(usage_raw.get("input_tokens", 0))
+            output_tokens = int(usage_raw.get("output_tokens", 0))
+        else:
+            input_tokens = int(getattr(usage_raw, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage_raw, "output_tokens", 0) or 0)
+        usage = UsageInfo(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+        )
+        return text, usage
+
+
 class LLMClientFactory:
     """LLM client factory.
     
@@ -177,80 +337,13 @@ class LLMClientFactory:
             ValueError: Unknown provider
             ImportError: Required package not installed
         """
-        provider_lower = provider.lower()
-        
-        if provider_lower == "anthropic":
-            from claude_code.api.client import APIClient, APIClientConfig, APIProvider
-            config = APIClientConfig(
-                api_key=api_key,
-                provider=APIProvider.ANTHROPIC,
-                base_url=base_url,
-            )
-            return APIClient(config)
-        
-        elif provider_lower in ("openai", "ollama", "vllm", "deepseek"):
-            default_urls = {
-                "ollama": "http://localhost:11434/v1",
-                "vllm": "http://localhost:8000/v1",
-                "deepseek": "https://api.deepseek.com/v1",
-            }
-            resolved_url = base_url or default_urls.get(provider_lower, base_url)
-            try:
-                from claude_code.api.openai_adapter import OpenAIAdapter
-                return OpenAIAdapter(
-                    api_key=api_key or "dummy",
-                    base_url=resolved_url or base_url,
-                    model=model,
-                )
-            except ImportError:
-                raise ImportError(
-                    f"OpenAI-compatible provider '{provider}' requires the 'openai' package. "
-                    f"Install with: pip install openai"
-                )
-        
-        elif provider_lower == "azure":
-            try:
-                from claude_code.api.openai_adapter import OpenAIAdapter
-                azure_endpoint = base_url or kwargs.get("azure_endpoint")
-                api_version = kwargs.get("api_version", "2024-02-15-preview")
-                return OpenAIAdapter(
-                    api_key=api_key,
-                    base_url=azure_endpoint,
-                    model=model,
-                    provider_type="azure",
-                    api_version=api_version,
-                )
-            except ImportError:
-                raise ImportError(
-                    f"Azure OpenAI provider requires the 'openai' package. "
-                    f"Install with: pip install openai"
-                )
-        
-        elif provider_lower == "bedrock":
-            from claude_code.api.client import APIClient, APIClientConfig, APIProvider
-            config = APIClientConfig(
-                api_key=api_key,
-                provider=APIProvider.AWS_BEDROCK,
-                aws_region=kwargs.get("aws_region", "us-east-1"),
-            )
-            return APIClient(config)
-        
-        elif provider_lower == "vertex":
-            from claude_code.api.client import APIClient, APIClientConfig, APIProvider
-            config = APIClientConfig(
-                api_key=api_key,
-                provider=APIProvider.GOOGLE_VERTEX,
-                vertex_project=kwargs.get("vertex_project"),
-                vertex_location=kwargs.get("vertex_location", "us-central1"),
-            )
-            return APIClient(config)
-        
-        else:
-            known_providers = ["anthropic", "openai", "ollama", "vllm", "deepseek", "bedrock", "vertex", "azure"]
-            raise ValueError(
-                f"Unknown provider: '{provider}'. "
-                f"Known providers: {', '.join(known_providers)}"
-            )
+        return APIClientAdapter(
+            provider=provider.lower(),
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            **kwargs,
+        )
 
 
 # For backward compatibility
@@ -259,6 +352,7 @@ APIClientProtocol = BaseLLMAdapter
 
 __all__ = [
     "BaseLLMAdapter",
+    "APIClientAdapter",
     "APIClientProtocol",
     "ChatMessage",
     "ToolDefinition",

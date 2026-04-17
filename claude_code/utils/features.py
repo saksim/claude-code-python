@@ -1,26 +1,22 @@
-import warnings
-warnings.warn(f"{__name__} is deprecated and will be removed in a future version.", DeprecationWarning, stacklevel=2)
-"""
-Claude Code Python - Feature Discovery Helper
-帮助用户发现和启用功能.
-
-Following TOP Python Dev standards:
-- Clear type hints
-- Comprehensive docstrings
-"""
+"""Claude Code Python - Feature Discovery Helper."""
 
 from __future__ import annotations
 
-import logging
+import os
+import warnings
 from dataclasses import dataclass
-from typing import Optional
 
-logger = logging.getLogger(__name__)
+warnings.warn(
+    f"{__name__} is deprecated and will be removed in a future version.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class FeatureInfo:
-    """Feature information for discovery."""
+    """Feature information for discovery UI."""
+
     name: str
     tool_name: str
     description: str
@@ -29,13 +25,13 @@ class FeatureInfo:
 
 
 class FeatureDiscovery:
-    """Feature discovery and management."""
-    
+    """Feature discovery and environment-driven enable/disable helpers."""
+
     FEATURES: list[FeatureInfo] = [
         FeatureInfo(
             name="Web Browser Automation",
             tool_name="web_browser",
-            description="Enable web browsing with navigation, click, screenshot support",
+            description="Enable web browsing with navigation/click/screenshot support",
             env_var="WEB_BROWSER_TOOL",
             enabled=False,
         ),
@@ -63,7 +59,7 @@ class FeatureDiscovery:
         FeatureInfo(
             name="Peer Process List",
             tool_name="list_peers",
-            description="List connected peer processes (for multi-agent coordination)",
+            description="List connected peer processes for multi-agent coordination",
             env_var="UDS_INBOX",
             enabled=False,
         ),
@@ -117,104 +113,67 @@ class FeatureDiscovery:
             enabled=False,
         ),
     ]
-    
+
     @classmethod
     def list_all(cls) -> list[FeatureInfo]:
-        """List all available features with their status.
-        
-        Returns:
-            List of FeatureInfo with current enabled status
-        """
-        import os
-        
-        result = []
+        result: list[FeatureInfo] = []
         for feature in cls.FEATURES:
-            enabled = os.environ.get(feature.env_var, "0") in ("1", "true", "True")
-            result.append(FeatureInfo(
-                name=feature.name,
-                tool_name=feature.tool_name,
-                description=feature.description,
-                env_var=feature.env_var,
-                enabled=enabled,
-            ))
+            enabled = os.environ.get(feature.env_var, "0") in {"1", "true", "True"}
+            result.append(
+                FeatureInfo(
+                    name=feature.name,
+                    tool_name=feature.tool_name,
+                    description=feature.description,
+                    env_var=feature.env_var,
+                    enabled=enabled,
+                )
+            )
         return result
-    
+
     @classmethod
     def list_enabled(cls) -> list[FeatureInfo]:
-        """List only enabled features.
-        
-        Returns:
-            List of enabled FeatureInfo
-        """
-        return [f for f in cls.list_all() if f.enabled]
-    
+        return [feature for feature in cls.list_all() if feature.enabled]
+
     @classmethod
     def list_disabled(cls) -> list[FeatureInfo]:
-        """List only disabled features.
-        
-        Returns:
-            List of disabled FeatureInfo
-        """
-        return [f for f in cls.list_all() if not f.enabled]
-    
+        return [feature for feature in cls.list_all() if not feature.enabled]
+
     @classmethod
     def enable(cls, env_var: str) -> bool:
-        """Enable a feature by environment variable name.
-        
-        Args:
-            env_var: Environment variable name (e.g., "KAIROS")
-            
-        Returns:
-            True if successful
-        """
-        import os
         os.environ[env_var] = "1"
         return True
-    
+
     @classmethod
     def disable(cls, env_var: str) -> bool:
-        """Disable a feature by environment variable name.
-        
-        Args:
-            env_var: Environment variable name (e.g., "KAIROS")
-            
-        Returns:
-            True if successful
-        """
-        import os
         os.environ[env_var] = "0"
         return True
-    
+
     @classmethod
     def print_help(cls) -> None:
-        """Print available features and how to enable them.
-        
-        Note: This prints to stdout for CLI help display purposes.
-        """
         enabled = cls.list_enabled()
         disabled = cls.list_disabled()
 
         print("=" * 60)
         print("Claude Code Python - Available Features")
         print("=" * 60)
-        
+
         if enabled:
             print(f"\n[ENABLED] ({len(enabled)} features)")
-            for f in enabled:
-                print(f"  + {f.name}")
-                print(f"    Tool: {f.tool_name}")
-                print(f"    Env:  {f.env_var}=1")
+            for feature in enabled:
+                print(f"  + {feature.name}")
+                print(f"    Tool: {feature.tool_name}")
+                print(f"    Env:  {feature.env_var}=1")
                 print()
-        
+
         if disabled:
             print(f"\n[DISABLED] ({len(disabled)} features)")
-            for f in disabled:
-                print(f"  - {f.name}")
-                print(f"    Tool: {f.tool_name}")
-                print(f"    Description: {f.description}")
-                print(f"    Enable with: export {f.env_var}=1")
+            for feature in disabled:
+                print(f"  - {feature.name}")
+                print(f"    Tool: {feature.tool_name}")
+                print(f"    Description: {feature.description}")
+                print(f"    Enable with: export {feature.env_var}=1")
                 print()
-        
+
         print("-" * 60)
         print("Usage:")
         print("  from claude_code.utils import FeatureDiscovery")

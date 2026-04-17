@@ -299,7 +299,6 @@ Report your findings and results clearly."""
             prompt=prompt,
             model=model,
             background=True,
-            description=description,
         )
         
         async def _execute_agent(task):

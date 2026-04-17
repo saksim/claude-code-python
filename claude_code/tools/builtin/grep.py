@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import fnmatch
 from pathlib import Path
 from typing import Any, Optional
 from functools import lru_cache
@@ -26,6 +27,10 @@ def _compile_pattern(pattern: str, flags: int) -> re.Pattern:
         Compiled regex Pattern object
     """
     return re.compile(pattern, flags)
+
+_SKIP_DIRS = frozenset(
+    {".git", "node_modules", "__pycache__", ".svn", ".hg", "vendor", "venv", ".venv", "dist", "build"}
+)
 
 
 class GrepTool(Tool):
@@ -116,13 +121,11 @@ class GrepTool(Tool):
         matches: list[str] = []
         files_searched = 0
         
-        _SKIP_DIRS = frozenset({'.git', 'node_modules', '__pycache__', '.svn', '.hg', 'vendor', 'venv', '.venv', 'dist', 'build'})
-        
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
             
             for file in files:
-                if include and not file.endswith(include.replace('*', '')):
+                if include and not fnmatch.fnmatch(file, include):
                     continue
                 
                 files_searched += 1

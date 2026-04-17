@@ -27,11 +27,13 @@ class APIProvider(Enum):
     
     Attributes:
         ANTHROPIC: Anthropic's Claude API
+        OPENAI: OpenAI-compatible Chat Completions API
         AWS_BEDROCK: AWS Bedrock (via Amazon Nova, Anthropic models)
         GOOGLE_VERTEX: Google Vertex AI (via Gemini, Claude)
         AZURE: Azure OpenAI compatible API
     """
     ANTHROPIC = "anthropic"
+    OPENAI = "openai"
     AWS_BEDROCK = "bedrock"
     GOOGLE_VERTEX = "vertex"
     AZURE = "azure"
@@ -201,12 +203,17 @@ class APIClient:
                 base_url=self.config.base_url,
                 timeout=self.config.timeout,
             )
+        elif self.config.provider == APIProvider.OPENAI:
+            self._setup_openai()
         elif self.config.provider == APIProvider.AWS_BEDROCK:
             self._setup_bedrock()
         elif self.config.provider == APIProvider.GOOGLE_VERTEX:
             self._setup_vertex()
         elif self.config.provider == APIProvider.AZURE:
-            self._setup_azure()
+            raise NotImplementedError(
+                "Azure provider is temporarily unavailable in this build. "
+                "Please use anthropic/bedrock/vertex until azure adapter is fully wired."
+            )
         else:
             raise ValueError(f"Unknown provider: {self.config.provider}")
     
@@ -225,6 +232,19 @@ class APIClient:
             )
         except ImportError:
             raise ImportError("boto3 required for AWS Bedrock. Install with: pip install boto3")
+    
+    def _setup_openai(self):
+        """Setup OpenAI-compatible client."""
+        try:
+            from openai import AsyncOpenAI
+            
+            self._client = AsyncOpenAI(
+                api_key=self.config.api_key or os.getenv("OPENAI_API_KEY") or "dummy",
+                base_url=self.config.base_url or os.getenv("OPENAI_BASE_URL"),
+                timeout=self.config.timeout,
+            )
+        except ImportError:
+            raise ImportError("openai required for OpenAI provider. Install with: pip install openai")
     
     def _setup_vertex(self):
         """Setup Google Vertex AI client."""
@@ -272,6 +292,9 @@ class APIClient:
         if not self._client:
             raise APIClientError("API client not initialized")
         
+        if self.config.provider == APIProvider.OPENAI:
+            return await self._create_message_openai(messages, options)
+        
         # Convert messages to API format
         api_messages = self._format_messages(messages)
         
@@ -306,6 +329,61 @@ class APIClient:
         except Exception as e:
             raise self._handle_error(e)
     
+    async def _create_message_openai(
+        self,
+        messages: list[MessageParam],
+        options: QueryOptions,
+    ) -> Message:
+        """Create a non-streaming message request via OpenAI-compatible API."""
+        api_messages = self._format_openai_messages(messages, options.system)
+        
+        params: dict[str, Any] = {
+            "model": options.model,
+            "messages": api_messages,
+            "max_tokens": options.max_tokens,
+        }
+        if options.temperature is not None:
+            params["temperature"] = options.temperature
+        if options.tools:
+            params["tools"] = [self._format_openai_tool(t) for t in options.tools]
+            params["tool_choice"] = "auto"
+        
+        try:
+            response = await self._client.chat.completions.create(**params)
+            choice = response.choices[0].message
+            content_blocks: list[dict[str, Any]] = []
+            
+            if choice.content:
+                content_blocks.append({"type": "text", "text": choice.content})
+            
+            tool_calls = getattr(choice, "tool_calls", None) or []
+            for tool_call in tool_calls:
+                args_str = getattr(tool_call.function, "arguments", "") or "{}"
+                try:
+                    parsed_input = json.loads(args_str)
+                except Exception:
+                    parsed_input = {"_raw": args_str}
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": getattr(tool_call, "id", ""),
+                    "name": getattr(tool_call.function, "name", ""),
+                    "input": parsed_input,
+                })
+            
+            class _Response:
+                def __init__(self, content, usage):
+                    self.content = content
+                    self.usage = usage
+            
+            usage_obj = getattr(response, "usage", None)
+            usage = {
+                "input_tokens": getattr(usage_obj, "prompt_tokens", 0) if usage_obj else 0,
+                "output_tokens": getattr(usage_obj, "completion_tokens", 0) if usage_obj else 0,
+            }
+            return _Response(content_blocks, usage)
+        except Exception as e:
+            raise self._handle_error(e)
+    
     async def create_message_streaming(
         self,
         messages: list[MessageParam],
@@ -323,6 +401,18 @@ class APIClient:
         """
         if not self._client:
             raise APIClientError("API client not initialized")
+        
+        if self.config.provider == APIProvider.OPENAI:
+            try:
+                response = await self._create_message_openai(messages, options)
+                yield StreamEvent(
+                    type="message",
+                    content={"content": response.content},
+                    usage=response.usage,
+                )
+            except Exception as e:
+                yield StreamEvent(type="error", error=str(e))
+            return
         
         api_messages = self._format_messages(messages)
         
@@ -369,6 +459,79 @@ class APIClient:
         and list content use the same dict structure.
         """
         return [{"role": msg.role, "content": msg.content} for msg in messages]
+    
+    def _format_openai_messages(
+        self,
+        messages: list[MessageParam],
+        system: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Convert internal message format to OpenAI chat format."""
+        openai_messages: list[dict[str, Any]] = []
+        if system:
+            openai_messages.append({"role": "system", "content": system})
+        
+        for msg in messages:
+            content = msg.content
+            if isinstance(content, str):
+                openai_messages.append({"role": msg.role, "content": content})
+                continue
+            
+            if not isinstance(content, list):
+                openai_messages.append({"role": msg.role, "content": str(content)})
+                continue
+            
+            text_parts: list[str] = []
+            tool_calls: list[dict[str, Any]] = []
+            emitted_tool_result = False
+            for block in content:
+                if not isinstance(block, dict):
+                    text_parts.append(str(block))
+                    continue
+                block_type = block.get("type")
+                if block_type == "text":
+                    text_parts.append(str(block.get("text", "")))
+                elif block_type == "tool_use":
+                    tool_calls.append({
+                        "id": block.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name", ""),
+                            "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                        },
+                    })
+                elif block_type == "tool_result":
+                    emitted_tool_result = True
+                    openai_messages.append({
+                        "role": "tool",
+                        "tool_call_id": block.get("tool_use_id", ""),
+                        "content": str(block.get("content", "")),
+                    })
+            
+            if tool_calls and msg.role == "assistant":
+                openai_messages.append({
+                    "role": "assistant",
+                    "content": "".join(text_parts) if text_parts else None,
+                    "tool_calls": tool_calls,
+                })
+            else:
+                if text_parts or not emitted_tool_result:
+                    openai_messages.append({
+                        "role": msg.role,
+                        "content": "".join(text_parts),
+                    })
+        
+        return openai_messages
+    
+    def _format_openai_tool(self, tool: ToolParam) -> dict[str, Any]:
+        """Format a tool for OpenAI Chat Completions."""
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.input_schema,
+            },
+        }
     
     def _format_tool(self, tool: ToolParam) -> dict:
         """Format a tool for the API."""

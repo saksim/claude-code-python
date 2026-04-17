@@ -28,6 +28,17 @@ class PermissionMode(Enum):
 # PermissionMode string values for validation
 PERMISSION_MODES: list[str] = [m.value for m in PermissionMode]
 
+_SAFE_READ_TOOLS: frozenset[str] = frozenset({"read", "glob", "grep", "web_search", "web_fetch"})
+_PLAN_ALLOWED_TOOLS: frozenset[str] = frozenset({"read", "glob", "grep", "web_search", "web_fetch"})
+_ACCEPT_EDITS_ALLOWED_TOOLS: frozenset[str] = frozenset(
+    {"read", "glob", "grep", "web_search", "web_fetch", "write", "edit", "notebook_edit"}
+)
+_STRICT_DENY_TOOLS: frozenset[str] = frozenset(
+    {"bash", "powershell", "write", "edit", "notebook_edit", "rm", "delete", "task_create", "agent"}
+)
+_STRICT_ALLOW_TOOLS: frozenset[str] = frozenset({"read", "glob", "grep"})
+_STRICT_DENY_PREFIXES: tuple[str, ...] = ()
+
 
 @dataclass(frozen=True, slots=True)
 class ToolPermissionContext:
@@ -45,6 +56,7 @@ class ToolPermissionContext:
     deny_prefixes: tuple[str, ...] = ()
     allow_names: frozenset[str] = field(default_factory=frozenset)
     allow_prefixes: tuple[str, ...] = ()
+    default_allow: bool = True
     
     def blocks(self, tool_name: str) -> bool:
         """Check if tool execution should be blocked.
@@ -57,14 +69,6 @@ class ToolPermissionContext:
         """
         lowered = tool_name.lower()
         
-        # Check allow list first
-        if lowered in self.allow_names:
-            return False
-        
-        for prefix in self.allow_prefixes:
-            if lowered.startswith(prefix.lower()):
-                return False
-        
         # Check deny list
         if lowered in self.deny_names:
             return True
@@ -73,7 +77,15 @@ class ToolPermissionContext:
             if lowered.startswith(prefix.lower()):
                 return True
         
-        return False
+        # Check allow list
+        if lowered in self.allow_names:
+            return False
+        
+        for prefix in self.allow_prefixes:
+            if lowered.startswith(prefix.lower()):
+                return False
+        
+        return not self.default_allow
     
     def allows(self, tool_name: str) -> bool:
         """Check if tool execution is allowed.
@@ -101,17 +113,30 @@ class ToolPermissionContext:
         Returns:
             Configured ToolPermissionContext instance
         """
-        allow_names = frozenset(a.lower() for a in (always_allow or []))
-        deny_names = frozenset(d.lower() for d in (always_deny or []))
+        allow_names_set: set[str] = set()
+        deny_names_set: set[str] = set()
+        allow_prefixes_list: list[str] = []
+        deny_prefixes_list: list[str] = []
         
-        allow_prefixes: tuple[str, ...] = ()
-        deny_prefixes: tuple[str, ...] = ()
+        for item in (always_allow or []):
+            lowered = item.lower()
+            if lowered.endswith("*"):
+                allow_prefixes_list.append(lowered[:-1])
+            else:
+                allow_names_set.add(lowered)
+        for item in (always_deny or []):
+            lowered = item.lower()
+            if lowered.endswith("*"):
+                deny_prefixes_list.append(lowered[:-1])
+            else:
+                deny_names_set.add(lowered)
         
         return cls(
-            deny_names=deny_names,
-            deny_prefixes=deny_prefixes,
-            allow_names=allow_names,
-            allow_prefixes=allow_prefixes,
+            deny_names=frozenset(deny_names_set),
+            deny_prefixes=tuple(deny_prefixes_list),
+            allow_names=frozenset(allow_names_set),
+            allow_prefixes=tuple(allow_prefixes_list),
+            default_allow=True,
         )
     
     @classmethod
@@ -126,6 +151,7 @@ class ToolPermissionContext:
             deny_prefixes=(),
             allow_names=frozenset(),
             allow_prefixes=(),
+            default_allow=True,
         )
     
     @classmethod
@@ -140,6 +166,18 @@ class ToolPermissionContext:
             deny_prefixes=_STRICT_DENY_PREFIXES,
             allow_names=_STRICT_ALLOW_TOOLS,
             allow_prefixes=(),
+            default_allow=True,
+        )
+    
+    @classmethod
+    def allow_only(cls, allow_names: list[str]) -> "ToolPermissionContext":
+        """Create a context that blocks everything except explicit allow list."""
+        return cls(
+            deny_names=frozenset(),
+            deny_prefixes=(),
+            allow_names=frozenset(a.lower() for a in allow_names),
+            allow_prefixes=(),
+            default_allow=False,
         )
 
 
@@ -210,7 +248,7 @@ class PermissionChecker:
 
 
 def create_permission_checker(
-    mode: str = "default",
+    mode: str | PermissionMode = "default",
     always_allow: Optional[list[str]] = None,
     always_deny: Optional[list[str]] = None,
 ) -> PermissionChecker:
@@ -227,17 +265,29 @@ def create_permission_checker(
     Raises:
         ValueError: If mode is not recognized
     """
-    if mode == "default":
+    mode_value = (mode.value if isinstance(mode, PermissionMode) else str(mode)).strip()
+    mode_normalized = mode_value.lower()
+    
+    if mode_normalized == "yolo":
         context = ToolPermissionContext.default()
-    elif mode == "strict":
-        context = ToolPermissionContext.strict()
-    elif mode == "auto":
+    elif mode_normalized == "bypass":
+        context = ToolPermissionContext.default()
+    elif mode_normalized == "default":
         context = ToolPermissionContext.from_rules(
-            always_allow=always_allow or ["read", "glob", "grep"],
+            always_allow=always_allow or [],
             always_deny=always_deny or [],
         )
-    elif mode == "bypass":
-        context = ToolPermissionContext.default()
+    elif mode_normalized == "strict":
+        context = ToolPermissionContext.strict()
+    elif mode_normalized == "auto":
+        allowed = sorted(_SAFE_READ_TOOLS.union(set(a.lower() for a in (always_allow or []))))
+        context = ToolPermissionContext.allow_only(allowed)
+    elif mode_normalized == "plan":
+        allowed = sorted(_PLAN_ALLOWED_TOOLS.union(set(a.lower() for a in (always_allow or []))))
+        context = ToolPermissionContext.allow_only(allowed)
+    elif mode_normalized == "acceptedits":
+        allowed = sorted(_ACCEPT_EDITS_ALLOWED_TOOLS.union(set(a.lower() for a in (always_allow or []))))
+        context = ToolPermissionContext.allow_only(allowed)
     else:
         context = ToolPermissionContext.from_rules(
             always_allow=always_allow or [],
@@ -248,6 +298,8 @@ def create_permission_checker(
 
 
 __all__ = [
+    "PermissionMode",
+    "PERMISSION_MODES",
     "ToolPermissionContext",
     "PermissionChecker",
     "create_permission_checker",

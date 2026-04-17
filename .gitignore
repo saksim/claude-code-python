@@ -152,3 +152,4 @@ Thumbs.db
 .claude-code-python/
 sessions/
 cache/
+.claude/perf_tmp/

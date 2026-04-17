@@ -1,42 +1,55 @@
-"""
-Claude Code Python - Package initialization
+"""Claude Code Python package exports.
+
+Exports are resolved lazily to reduce cold-start import cost.
 """
 
-from claude_code.api.client import APIClient, APIClientConfig, APIProvider
-from claude_code.engine.query import QueryEngine, QueryConfig, Message, ToolUse
-from claude_code.engine.context import ContextBuilder, GitInfo, ClaudeMdLoader
-from claude_code.permissions import PermissionMode
-from claude_code.engine.session import Session, SessionManager, SessionStore
-from claude_code.tools.registry import create_default_registry, ToolRegistry
-from claude_code.repl import REPL, REPLConfig, PipeMode
-from claude_code.config import Config, get_config, LocalSettings
-from claude_code.services.mcp import MCPClient, MCPManager
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
 
 __version__ = "1.0.0"
 
-__all__ = [
-    "APIClient",
-    "APIClientConfig", 
-    "APIProvider",
-    "QueryEngine",
-    "QueryConfig",
-    "Message",
-    "ToolUse",
-    "ContextBuilder",
-    "GitInfo",
-    "ClaudeMdLoader",
-    "PermissionMode",
-    "Session",
-    "SessionManager",
-    "SessionStore",
-    "create_default_registry",
-    "ToolRegistry",
-    "REPL",
-    "REPLConfig",
-    "PipeMode",
-    "Config",
-    "get_config",
-    "LocalSettings",
-    "MCPClient",
-    "MCPManager",
-]
+_LAZY_EXPORTS: dict[str, tuple[str, str]] = {
+    "APIClient": ("claude_code.api.client", "APIClient"),
+    "APIClientConfig": ("claude_code.api.client", "APIClientConfig"),
+    "APIProvider": ("claude_code.api.client", "APIProvider"),
+    "QueryEngine": ("claude_code.engine.query", "QueryEngine"),
+    "QueryConfig": ("claude_code.engine.query", "QueryConfig"),
+    "Message": ("claude_code.engine.query", "Message"),
+    "ToolUse": ("claude_code.engine.query", "ToolUse"),
+    "ContextBuilder": ("claude_code.engine.context", "ContextBuilder"),
+    "GitInfo": ("claude_code.engine.context", "GitInfo"),
+    "ClaudeMdLoader": ("claude_code.engine.context", "ClaudeMdLoader"),
+    "PermissionMode": ("claude_code.permissions", "PermissionMode"),
+    "Session": ("claude_code.engine.session", "Session"),
+    "SessionManager": ("claude_code.engine.session", "SessionManager"),
+    "SessionStore": ("claude_code.engine.session", "SessionStore"),
+    "create_default_registry": ("claude_code.tools.registry", "create_default_registry"),
+    "ToolRegistry": ("claude_code.tools.registry", "ToolRegistry"),
+    "REPL": ("claude_code.repl", "REPL"),
+    "REPLConfig": ("claude_code.repl", "REPLConfig"),
+    "PipeMode": ("claude_code.repl", "PipeMode"),
+    "Config": ("claude_code.config", "Config"),
+    "get_config": ("claude_code.config", "get_config"),
+    "LocalSettings": ("claude_code.config", "LocalSettings"),
+    "MCPClient": ("claude_code.services.mcp", "MCPClient"),
+    "MCPManager": ("claude_code.services.mcp", "MCPManager"),
+}
+
+__all__ = list(_LAZY_EXPORTS.keys())
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _LAZY_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module_name, attr_name = _LAZY_EXPORTS[name]
+    module = import_module(module_name)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(list(globals().keys()) + __all__)

@@ -72,22 +72,12 @@ class GlobTool(Tool):
             path = os.path.join(context.working_directory, path)
         
         try:
-            # Use glob_module.glob which returns relative paths when root_dir is set.
-            # For recursive globs, this can return thousands of entries including dirs.
-            # Optimizations:
-            # 1. Use dir_fd=True + os.scandir for large results (faster than os.path.isfile per hit)
-            # 2. Short-circuit at MAX_RESULTS + 1 to avoid filtering the entire list
-            all_matches = glob_module.glob(
-                pattern,
-                root_dir=path,
-                recursive=True,
-            )
-            
-            # Filter to files only, short-circuiting once we exceed MAX_RESULTS
+            # Stream glob results and short-circuit once we have enough files.
+            # This avoids materializing all matches for very large repositories.
             file_matches = []
             total_count = 0
             truncated = False
-            for m in all_matches:
+            for m in glob_module.iglob(pattern, root_dir=path, recursive=True):
                 total_count += 1
                 full_path = os.path.join(path, m)
                 if os.path.isfile(full_path):
