@@ -23,22 +23,47 @@ from claude_code.agents.builtin import (
     setup_builtin_agents,
 )
 
-# Module-level reusable default API config (avoid repeated object creation)
-_DEFAULT_API_CONFIG = None
+_MODEL_ALIASES: dict[str, str] = {
+    "haiku": "claude-haiku-20240307",
+    "sonnet": "claude-sonnet-4-20250514",
+    "opus": "claude-opus-4-20250514",
+    "sonnet-4": "claude-sonnet-4-20250514",
+    "opus-4": "claude-opus-4-20250514",
+}
 
 
-def _get_default_api_config():
-    """Get or create a cached default API config for agent spawns.
-    
-    Reuses the same config object across agent calls to avoid
-    repeated object creation. The Anthropic SDK handles actual
-    connection pooling internally.
-    """
-    global _DEFAULT_API_CONFIG
-    if _DEFAULT_API_CONFIG is None:
-        from claude_code.api.client import APIClientConfig
-        _DEFAULT_API_CONFIG = APIClientConfig()
-    return _DEFAULT_API_CONFIG
+def _resolve_model_name(model: str) -> str:
+    """Resolve a short model alias to a full runtime model id."""
+    if not model:
+        return _MODEL_ALIASES["sonnet"]
+    if model in _MODEL_ALIASES:
+        return _MODEL_ALIASES[model]
+    if model.startswith("claude-"):
+        return model
+    return model
+
+
+def _create_agent_api_client():
+    """Create API client using the same config resolution as main runtime."""
+    from claude_code.main import setup_api_client
+
+    return setup_api_client()
+
+
+def _build_subagent_system_prompt(
+    agent_prompt: str,
+    task_prompt: str,
+    working_directory: str,
+) -> str:
+    """Build consistent system prompt for sync/background sub-agents."""
+    return f"""{agent_prompt}
+
+You are executing as a sub-agent of Claude Code. Your task is:
+{task_prompt}
+
+Working directory: {working_directory}
+
+Report your findings and results clearly."""
 
 
 def _build_agent_registry() -> dict[str, AgentDefinition]:
@@ -223,8 +248,7 @@ class AgentTool(Tool):
         on_progress: Optional[ToolCallback],
     ) -> ToolResult:
         """Run agent synchronously."""
-        from claude_code.engine.query import QueryEngine, Message
-        from claude_code.api.client import APIClient, APIClientConfig
+        from claude_code.engine.query import QueryConfig, QueryEngine, Message
         
         worktree_path = None
         if isolation == "worktree":
@@ -233,33 +257,37 @@ class AgentTool(Tool):
                 cwd = worktree_path
         
         try:
-            api_config = _get_default_api_config()
-            api_client = APIClient(api_config)
-            
-            system_prompt = f"""{agent_def.prompt}
+            api_client = _create_agent_api_client()
+            system_prompt = _build_subagent_system_prompt(
+                agent_prompt=agent_def.prompt,
+                task_prompt=prompt,
+                working_directory=cwd,
+            )
+            resolved_model = _resolve_model_name(model)
 
-You are executing as a sub-agent of Claude Code. Your task is:
-{prompt}
-
-Working directory: {cwd}
-
-Report your findings and results clearly."""
-            
+            query_config = QueryConfig(
+                model=resolved_model,
+                system_prompt=system_prompt,
+                permission_mode=context.permission_mode,
+                always_allow=list(context.always_allow),
+                always_deny=list(context.always_deny),
+                working_directory=cwd,
+            )
             engine = QueryEngine(
                 api_client=api_client,
-                config=None,
+                config=query_config,
                 tool_registry=None,
             )
-            
-            engine.config.system_prompt = system_prompt
-            if model:
-                engine.config.model = f"claude-{model}-4-20250514"
             
             result_parts = []
             async for event in engine.query(prompt):
                 if isinstance(event, Message) and event.role == "assistant":
                     if isinstance(event.content, str):
                         result_parts.append(event.content)
+                    elif isinstance(event.content, list):
+                        for block in event.content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                result_parts.append(str(block.get("text", "")))
                 elif isinstance(event, dict):
                     if event.get("type") == "text":
                         result_parts.append(event.get("content", ""))
@@ -291,41 +319,63 @@ Report your findings and results clearly."""
     ) -> ToolResult:
         """Run agent asynchronously in background."""
         from claude_code.tasks.manager import TaskManager
-        from claude_code.tasks.types import AgentTask
+        from claude_code.engine.query import QueryConfig, QueryEngine, Message
+        from claude_code.tasks.types import TaskResult
         
         task_manager = TaskManager.get_instance()
+        execution_cwd = cwd
+        worktree_path = None
+        if isolation == "worktree":
+            worktree_path = await self._create_worktree(agent_name, cwd)
+            if worktree_path:
+                execution_cwd = worktree_path
+
+        resolved_model = _resolve_model_name(model)
+        system_prompt = _build_subagent_system_prompt(
+            agent_prompt=agent_def.prompt,
+            task_prompt=prompt,
+            working_directory=execution_cwd,
+        )
         
         task = await task_manager.create_agent_task(
             prompt=prompt,
-            model=model,
+            model=resolved_model,
             background=True,
         )
         
         async def _execute_agent(task):
-            from claude_code.engine.query import QueryEngine, Message
-            from claude_code.api.client import APIClient
-            
-            api_config = _get_default_api_config()
-            api_client = APIClient(api_config)
-            engine = QueryEngine(api_client=api_client)
-            engine.config.system_prompt = agent_def.prompt
-            if model:
-                engine.config.model = f"claude-{model}-4-20250514"
-            
-            result_parts = []
-            async for event in engine.query(prompt):
-                if isinstance(event, Message) and event.role == "assistant":
-                    if isinstance(event.content, str):
-                        result_parts.append(event.content)
-                elif isinstance(event, dict):
-                    if event.get("type") == "text":
-                        result_parts.append(event.get("content", ""))
-            
-            from claude_code.tasks.types import TaskResult
-            return TaskResult(
-                code=0,
-                stdout="\n".join(result_parts) if result_parts else "Agent completed with no output",
-            )
+            try:
+                api_client = _create_agent_api_client()
+                query_config = QueryConfig(
+                    model=resolved_model,
+                    system_prompt=system_prompt,
+                    permission_mode=context.permission_mode,
+                    always_allow=list(context.always_allow),
+                    always_deny=list(context.always_deny),
+                    working_directory=execution_cwd,
+                )
+                engine = QueryEngine(api_client=api_client, config=query_config)
+                
+                result_parts = []
+                async for event in engine.query(prompt):
+                    if isinstance(event, Message) and event.role == "assistant":
+                        if isinstance(event.content, str):
+                            result_parts.append(event.content)
+                        elif isinstance(event.content, list):
+                            for block in event.content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    result_parts.append(str(block.get("text", "")))
+                    elif isinstance(event, dict):
+                        if event.get("type") == "text":
+                            result_parts.append(event.get("content", ""))
+                
+                return TaskResult(
+                    code=0,
+                    stdout="\n".join(result_parts) if result_parts else "Agent completed with no output",
+                )
+            finally:
+                if worktree_path:
+                    await self._cleanup_worktree(worktree_path)
         
         await task_manager.start_task(task.id, executor=_execute_agent)
         

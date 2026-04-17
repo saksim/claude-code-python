@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 import pytest
 
 from claude_code.engine.query import QueryConfig, QueryEngine, ToolCallResult
@@ -121,6 +122,28 @@ class _WriteTool(Tool):
         return ToolResult(content="should-not-run")
 
 
+class _WorkingDirTool(Tool):
+    @property
+    def name(self) -> str:
+        return "workdir_tool"
+
+    @property
+    def description(self) -> str:
+        return "returns working directory from tool context"
+
+    @property
+    def input_schema(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(
+        self,
+        input_data: dict,
+        context: ToolContext,
+        on_progress=None,
+    ) -> ToolResult:
+        return ToolResult(content=context.working_directory)
+
+
 class _SleepToolA(Tool):
     @property
     def name(self) -> str:
@@ -210,6 +233,26 @@ async def test_query_engine_executes_tool_use_blocks():
     assert tool_results
     assert tool_results[0].result.is_error is False
     assert tool_results[0].result.content == "hello"
+
+
+@pytest.mark.asyncio
+async def test_query_engine_propagates_configured_working_directory_to_tools():
+    registry = ToolRegistry()
+    registry.register(_WorkingDirTool())
+    configured_workdir = str(Path.cwd() / "custom_workdir_for_test")
+    engine = QueryEngine(
+        api_client=_FakeAPIClient("workdir_tool"),
+        config=QueryConfig(tools=[_WorkingDirTool()], working_directory=configured_workdir),
+        tool_registry=registry,
+    )
+
+    tool_results: list[ToolCallResult] = []
+    async for event in engine.query("report cwd"):
+        if isinstance(event, ToolCallResult):
+            tool_results.append(event)
+
+    assert tool_results
+    assert tool_results[0].result.content == configured_workdir
 
 
 @pytest.mark.asyncio

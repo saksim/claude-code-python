@@ -25,7 +25,7 @@ from claude_code.engine.context import ContextBuilder
 from claude_code.repl import REPL, REPLConfig, PipeMode
 from claude_code.tools.registry import create_default_registry
 from claude_code.commands.registry import setup_default_commands
-from claude_code.config import get_config
+from claude_code.config import Config, get_config
 
 
 def _configure_windows_console_encoding() -> None:
@@ -49,15 +49,12 @@ def _configure_windows_console_encoding() -> None:
             pass
 
 
-def setup_api_client() -> APIClient:
+def setup_api_client(app_config: Optional[Config] = None) -> APIClient:
     """Setup the API client based on environment.
     
-    Reads from environment variables:
-    - CLAUDE_API_PROVIDER: anthropic/openai/ollama/vllm/deepseek/bedrock/vertex/azure
-    - ANTHROPIC_API_KEY: API key for Anthropic
-    - AWS_REGION, AWS_PROFILE: For Bedrock
-    - VERTEX_PROJECT, VERTEX_LOCATION: For Vertex
-    - AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_API_KEY: For Azure
+    Resolution order:
+    1) Environment variables
+    2) Loaded config values
     
     Returns:
         Configured APIClient instance.
@@ -65,14 +62,19 @@ def setup_api_client() -> APIClient:
     Raises:
         ValueError: If required environment variables are missing.
     """
+    if app_config is None:
+        app_config = get_config()
+
     # Check for API provider
-    provider = os.getenv("CLAUDE_API_PROVIDER", "anthropic").lower()
+    provider = os.getenv("CLAUDE_API_PROVIDER", app_config.api_provider).lower()
     
     # Build config based on provider
     if provider == "anthropic":
+        config_api_key = app_config.api_key if app_config.api_provider == "anthropic" else None
+        api_key = os.getenv("ANTHROPIC_API_KEY") or config_api_key
         config = APIClientConfig(
             provider=APIProvider.ANTHROPIC,
-            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            api_key=api_key,
         )
     elif provider in ("openai", "ollama", "vllm", "deepseek"):
         default_urls = {
@@ -80,8 +82,17 @@ def setup_api_client() -> APIClient:
             "vllm": "http://localhost:8000/v1",
             "deepseek": "https://api.deepseek.com/v1",
         }
-        base_url = os.getenv("OPENAI_BASE_URL") or default_urls.get(provider)
-        api_key = os.getenv("OPENAI_API_KEY")
+        base_url = (
+            os.getenv("OPENAI_BASE_URL")
+            or app_config.openai_base_url
+            or default_urls.get(provider)
+        )
+        config_api_key = (
+            app_config.api_key
+            if app_config.api_provider in ("openai", "ollama", "vllm", "deepseek")
+            else None
+        )
+        api_key = os.getenv("OPENAI_API_KEY") or config_api_key
         if provider in ("openai", "deepseek") and not api_key:
             raise ValueError(
                 f"{provider} provider requires OPENAI_API_KEY to be set. "
@@ -95,14 +106,18 @@ def setup_api_client() -> APIClient:
     elif provider == "bedrock":
         config = APIClientConfig(
             provider=APIProvider.AWS_BEDROCK,
-            aws_region=os.getenv("AWS_REGION", "us-east-1"),
-            aws_profile=os.getenv("AWS_PROFILE"),
+            aws_region=os.getenv("AWS_REGION") or app_config.aws_region or "us-east-1",
+            aws_profile=os.getenv("AWS_PROFILE") or app_config.aws_profile,
         )
     elif provider == "vertex":
         config = APIClientConfig(
             provider=APIProvider.GOOGLE_VERTEX,
-            vertex_project=os.getenv("VERTEX_PROJECT"),
-            vertex_location=os.getenv("VERTEX_LOCATION", "us-central1"),
+            vertex_project=os.getenv("VERTEX_PROJECT") or app_config.vertex_project,
+            vertex_location=(
+                os.getenv("VERTEX_LOCATION")
+                or app_config.vertex_location
+                or "us-central1"
+            ),
         )
     elif provider == "azure":
         raise ValueError(
@@ -172,14 +187,13 @@ def create_engine(
     Returns:
         Configured QueryEngine instance.
     """
-    api_client = setup_api_client()
-    
-    # Get model from arg or environment
-    if model is None:
-        model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
-    
-    # Load app config for permission propagation
+    # Load app config once and propagate into runtime
     app_config = get_config()
+    api_client = setup_api_client(app_config)
+    
+    # Get model from arg, config, then environment fallback
+    if model is None:
+        model = app_config.model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
     
     # Build query config with permission propagation
     query_config = QueryConfig(
@@ -189,6 +203,7 @@ def create_engine(
         permission_mode=app_config.permission_mode.value if app_config.permission_mode else "default",
         always_allow=list(app_config.always_allow),
         always_deny=list(app_config.always_deny),
+        working_directory=working_dir or os.getcwd(),
     )
     
     # Get tools from environment or use defaults
@@ -215,7 +230,7 @@ async def run_repl(
         verbose: Enable verbose output.
         system: Optional system prompt override.
     """
-    engine = create_engine(model=model)
+    engine = create_engine(model=model, working_dir=os.getcwd())
     
     # Add custom system prompt if provided
     if system:
@@ -244,7 +259,7 @@ async def run_pipe_mode(
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
-    engine = create_engine(model=model)
+    engine = create_engine(model=model, working_dir=os.getcwd())
     pipe = PipeMode(engine)
     return await pipe.run()
 
@@ -256,7 +271,7 @@ async def run_single_query(
     system: Optional[str] = None,
 ) -> int:
     """Run a single query and print result to stdout."""
-    engine = create_engine(model=model)
+    engine = create_engine(model=model, working_dir=os.getcwd())
     if system:
         engine.config.system_prompt = system
     

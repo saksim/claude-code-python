@@ -101,7 +101,7 @@ class MCPStdIOTransport(MCPTransport):
         self._command = command
         self._args = args
         self._env = env
-        self._process: Optional[subprocess.Process] = None
+        self._process: Optional[asyncio.subprocess.Process] = None
         self._reader_task: Optional[asyncio.Task] = None
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._request_id = 0
@@ -136,8 +136,8 @@ class MCPStdIOTransport(MCPTransport):
     async def send(self, message: dict) -> None:
         if not self._process or not self._process.stdin:
             raise ConnectionError("Not connected")
-        await self._process.stdin.write(json.dumps(message).encode() + b"\n")
-        await self._process.stdin.flush()
+        self._process.stdin.write(json.dumps(message).encode() + b"\n")
+        await self._process.stdin.drain()
     
     async def receive(self) -> dict:
         return await self._message_queue.get()
@@ -176,8 +176,7 @@ class MCPStdIOTransport(MCPTransport):
                                 ))
                             else:
                                 future.set_result(message.get("result"))
-                    else:
-                        await self._message_queue.put(message)
+                    await self._message_queue.put(message)
                 except json.JSONDecodeError:
                     pass
         except asyncio.CancelledError:
@@ -222,7 +221,7 @@ class MCPHTTPTransport(MCPTransport):
             await self._session.close()
         self._connected = False
     
-    async def send(self, message: dict) -> None:
+    async def send(self, message: dict) -> dict[str, Any]:
         if not self._session:
             raise ConnectionError("Not connected")
         
@@ -275,26 +274,44 @@ class MCPWebSocketTransport(MCPTransport):
         self._url = url
         self._auth = auth
         self._ssl = ssl_context
+        self._aiohttp = None
+        self._session = None
         self._ws = None
         self._connected = False
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._request_id = 0
+        self._reader_task: Optional[asyncio.Task] = None
+        self._message_queue: asyncio.Queue = asyncio.Queue()
     
     async def connect(self) -> None:
         try:
             import aiohttp
         except ImportError:
             raise ImportError("aiohttp required for WebSocket transport: pip install aiohttp")
-        
-        session = aiohttp.ClientSession()
-        self._ws = await session.ws_connect(self._url, ssl=self._ssl)
+        self._aiohttp = aiohttp
+        self._session = aiohttp.ClientSession()
+        headers: dict[str, str] = {}
+        if self._auth:
+            headers["Authorization"] = f"Bearer {self._auth.access_token}"
+        self._ws = await self._session.ws_connect(self._url, ssl=self._ssl, headers=headers)
         self._connected = True
-        asyncio.create_task(self._reader_loop())
+        self._reader_task = asyncio.create_task(self._reader_loop())
     
     async def disconnect(self) -> None:
+        self._connected = False
+        if self._reader_task:
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+            self._reader_task = None
         if self._ws:
             await self._ws.close()
-        self._connected = False
+            self._ws = None
+        if self._session:
+            await self._session.close()
+            self._session = None
     
     async def send(self, message: dict) -> None:
         if not self._ws:
@@ -302,9 +319,7 @@ class MCPWebSocketTransport(MCPTransport):
         await self._ws.send_json(message)
     
     async def receive(self) -> dict:
-        if not self._ws:
-            raise ConnectionError("Not connected")
-        return await self._ws.receive_json()
+        return await self._message_queue.get()
     
     async def send_request(self, method: str, params: Optional[dict] = None) -> dict:
         request_id = str(self._request_id)
@@ -323,9 +338,9 @@ class MCPWebSocketTransport(MCPTransport):
         try:
             while self._connected:
                 msg = await self._ws.receive()
-                if msg.type == aiohttp.WSMsgType.TEXT:
+                if msg.type == self._aiohttp.WSMsgType.TEXT:
                     try:
-                        data = msg.json()
+                        data = json.loads(msg.data)
                         if "id" in data:
                             request_id = str(data["id"])
                             if request_id in self._pending_requests:
@@ -336,9 +351,14 @@ class MCPWebSocketTransport(MCPTransport):
                                     ))
                                 else:
                                     future.set_result(data.get("result"))
+                        await self._message_queue.put(data)
                     except json.JSONDecodeError:
                         pass
-                elif msg.type == aiohttp.WSMsgType.ERROR:
+                elif msg.type in (
+                    self._aiohttp.WSMsgType.ERROR,
+                    self._aiohttp.WSMsgType.CLOSED,
+                    self._aiohttp.WSMsgType.CLOSE,
+                ):
                     break
         except asyncio.CancelledError:
             pass
@@ -398,11 +418,16 @@ class MCPProtocol:
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._request_id = 0
         self._notification_handlers: dict[str, Callable] = {}
+        self._sender: Optional[Callable[[dict[str, Any]], Awaitable[Any]]] = None
     
     def _next_request_id(self) -> str:
         """Generate the next request ID."""
         self._request_id += 1
         return str(self._request_id)
+
+    def set_sender(self, sender: Callable[[dict[str, Any]], Awaitable[Any]]) -> None:
+        """Set async sender used for outbound JSON-RPC messages."""
+        self._sender = sender
     
     async def send_request(
         self,
@@ -421,12 +446,13 @@ class MCPProtocol:
         }
         if params:
             message["params"] = params
-        
-        # In STDIO mode, we write to the process
-        # This is handled by the transport layer
+
+        if self._sender is None:
+            raise RuntimeError("MCPProtocol sender not configured")
+        await self._sender(message)
         return await future
     
-    def send_notification(self, method: str, params: Optional[dict] = None) -> None:
+    async def send_notification(self, method: str, params: Optional[dict] = None) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         message = {
             "jsonrpc": "2.0",
@@ -434,6 +460,9 @@ class MCPProtocol:
         }
         if params:
             message["params"] = params
+        if self._sender is None:
+            raise RuntimeError("MCPProtocol sender not configured")
+        await self._sender(message)
     
     def handle_response(self, response: dict) -> None:
         """Handle a JSON-RPC response."""
@@ -468,7 +497,8 @@ class MCPClient:
     def __init__(self, config: MCPConnectionConfig):
         self.config = config
         self.protocol = MCPProtocol()
-        self._process: Optional[subprocess.Process] = None
+        self._transport: Optional[MCPTransport] = None
+        self._receiver_task: Optional[asyncio.Task] = None
         self._state = MCPConnectionState.DISCONNECTED
         self._tools: list[MCPTool] = []
         self._resources: list[MCPResource] = []
@@ -495,70 +525,105 @@ class MCPClient:
             return
         
         self._state = MCPConnectionState.CONNECTING
-        
-        if self.config.transport == MCPTransportType.STDIO:
-            await self._connect_stdio()
-        elif self.config.transport in (MCPTransportType.SSE, MCPTransportType.HTTP):
-            await self._connect_http()
-        else:
-            raise NotImplementedError(f"Transport {self.config.transport} not supported")
-    
-    async def _connect_stdio(self) -> None:
-        """Connect via STDIO transport."""
-        env = {**os.environ, **self.config.env}
-        
+
         try:
-            self._process = await asyncio.create_subprocess_exec(
-                self.config.command,
-                *self.config.args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            
-            # Start reading responses
-            asyncio.create_task(self._read_stdout())
-            
-            # Initialize the connection
+            self._transport = self._create_transport()
+            self.protocol.set_sender(self._send_with_transport)
+            await self._transport.connect()
+            self._receiver_task = asyncio.create_task(self._receive_loop())
             await self._initialize()
-            
             self._state = MCPConnectionState.CONNECTED
-            
         except Exception as e:
             self._state = MCPConnectionState.ERROR
+            await self._cleanup_transport()
             raise ConnectionError(f"Failed to connect to MCP server: {e}")
-    
-    async def _connect_http(self) -> None:
-        """Connect via HTTP/SSE transport."""
-        # HTTP/SSE transport implementation
-        # Would use aiohttp or similar
-        raise NotImplementedError("HTTP/SSE transport not yet implemented")
-    
-    async def _read_stdout(self) -> None:
-        """Read and process messages from stdout."""
-        if not self._process or not self._process.stdout:
+
+    def _create_transport(self) -> MCPTransport:
+        """Create transport instance from connection config."""
+        auth = self._build_auth_token()
+        ssl_context = self._build_ssl_context()
+
+        if self.config.transport == MCPTransportType.STDIO:
+            if not self.config.command:
+                raise ValueError("STDIO transport requires 'command'")
+            return MCPStdIOTransport(
+                command=self.config.command,
+                args=self.config.args,
+                env=self.config.env,
+            )
+
+        endpoint = self.config.url or self.config.command
+        if not endpoint:
+            raise ValueError("HTTP/SSE/WebSocket transport requires 'url' (or command fallback)")
+
+        if self.config.transport in (MCPTransportType.SSE, MCPTransportType.HTTP):
+            return MCPHTTPTransport(endpoint, auth=auth, ssl_context=ssl_context)
+        if self.config.transport == MCPTransportType.WEBSOCKET:
+            return MCPWebSocketTransport(endpoint, auth=auth, ssl_context=ssl_context)
+
+        raise NotImplementedError(f"Transport {self.config.transport} not supported")
+
+    def _build_auth_token(self) -> Optional[MCPAuthToken]:
+        """Build auth token from connection config."""
+        if self.config.auth_type in (MCPAuthType.API_KEY, MCPAuthType.BEARER):
+            if self.config.api_key:
+                return MCPAuthToken(access_token=self.config.api_key)
+            return None
+
+        if self.config.auth_type == MCPAuthType.OAUTH and self.config.oauth_config:
+            token = self.config.oauth_config.access_token
+            if token:
+                return MCPAuthToken(access_token=token)
+        return None
+
+    def _build_ssl_context(self) -> Optional[ssl.SSLContext]:
+        """Build SSL context according to config.ssl_verify."""
+        if self.config.ssl_verify:
+            return None
+        insecure_context = ssl.create_default_context()
+        insecure_context.check_hostname = False
+        insecure_context.verify_mode = ssl.CERT_NONE
+        return insecure_context
+
+    async def _send_with_transport(self, message: dict[str, Any]) -> None:
+        """Send JSON-RPC message through active transport."""
+        if self._transport is None:
+            raise ConnectionError("MCP transport is not connected")
+        response = await self._transport.send(message)
+        if isinstance(response, dict) and "id" in response:
+            self.protocol.handle_response(response)
+
+    async def _receive_loop(self) -> None:
+        """Dispatch inbound transport messages to MCPProtocol."""
+        if self._transport is None:
             return
-        
         try:
             while True:
-                line = await self._process.stdout.readline()
-                if not line:
-                    break
-                
-                try:
-                    message = json.loads(line.decode('utf-8'))
-                    
-                    if "id" in message:
-                        self.protocol.handle_response(message)
-                    else:
-                        self.protocol.handle_notification(message)
-                        
-                except json.JSONDecodeError:
-                    pass
-                    
+                message = await self._transport.receive()
+                if not isinstance(message, dict):
+                    continue
+                if "id" in message:
+                    self.protocol.handle_response(message)
+                else:
+                    self.protocol.handle_notification(message)
         except asyncio.CancelledError:
             pass
+        except Exception:
+            # Transport failures are surfaced through operation-level calls.
+            pass
+
+    async def _cleanup_transport(self) -> None:
+        """Cleanup transport and receiver task."""
+        if self._receiver_task:
+            self._receiver_task.cancel()
+            try:
+                await self._receiver_task
+            except asyncio.CancelledError:
+                pass
+            self._receiver_task = None
+        if self._transport:
+            await self._transport.disconnect()
+            self._transport = None
     
     async def _initialize(self) -> None:
         """Initialize the MCP connection."""
@@ -578,7 +643,7 @@ class MCPClient:
         )
         
         # Store capabilities
-        capabilities = result.get("capabilities", {})
+        _capabilities = result.get("capabilities", {}) if isinstance(result, dict) else {}
         
         # Fetch tools and resources
         await self._fetch_tools()
@@ -655,14 +720,7 @@ class MCPClient:
     
     async def disconnect(self) -> None:
         """Disconnect from the MCP server."""
-        if self._process:
-            self._process.terminate()
-            try:
-                await asyncio.wait_for(self._process.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                self._process.kill()
-            self._process = None
-        
+        await self._cleanup_transport()
         self._state = MCPConnectionState.DISCONNECTED
         self._tools.clear()
         self._resources.clear()

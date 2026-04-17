@@ -111,47 +111,72 @@ class ShutdownManager:
 
         logger.info(f"Shutting down gracefully: {reason}")
         self._phase = ShutdownPhase.DRAINING
+        if self.config.force_after > 0 and self._force_task is None:
+            self._force_task = asyncio.create_task(self._force_shutdown_after_timeout())
 
-        # Call shutdown callback
-        if self.config.on_shutdown:
-            if asyncio.iscoroutinefunction(self.config.on_shutdown):
-                await self.config.on_shutdown()
-            else:
-                self.config.on_shutdown()
-
-        # Wait for running tasks with timeout
-        if self._running_tasks:
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*self._running_tasks, return_exceptions=True),
-                    timeout=self.config.timeout,
-                )
-            except asyncio.TimeoutError:
-                logger.warning("Some tasks did not complete in time")
-
-        self._phase = ShutdownPhase.STOPPING
-
-        # Run cleanup callbacks
-        for name, cleanup in self._cleanups.items():
-            try:
-                if asyncio.iscoroutinefunction(cleanup):
-                    await cleanup()
+        try:
+            # Call shutdown callback
+            if self.config.on_shutdown:
+                if asyncio.iscoroutinefunction(self.config.on_shutdown):
+                    await self.config.on_shutdown()
                 else:
-                    cleanup()
-                logger.debug(f"Cleaned up: {name}")
-            except Exception as e:
-                logger.error(f"Error during cleanup {name}: {e}")
+                    self.config.on_shutdown()
 
-        # Call final cleanup callback
-        if self.config.on_cleanup:
-            if asyncio.iscoroutinefunction(self.config.on_cleanup):
-                await self.config.on_cleanup()
-            else:
-                self.config.on_cleanup()
+            # Wait for running tasks with timeout
+            if self._running_tasks:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*self._running_tasks, return_exceptions=True),
+                        timeout=self.config.timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Some tasks did not complete in time")
+
+            self._phase = ShutdownPhase.STOPPING
+
+            # Run cleanup callbacks
+            for name, cleanup in self._cleanups.items():
+                try:
+                    if asyncio.iscoroutinefunction(cleanup):
+                        await cleanup()
+                    else:
+                        cleanup()
+                    logger.debug(f"Cleaned up: {name}")
+                except Exception as e:
+                    logger.error(f"Error during cleanup {name}: {e}")
+
+            # Call final cleanup callback
+            if self.config.on_cleanup:
+                if asyncio.iscoroutinefunction(self.config.on_cleanup):
+                    await self.config.on_cleanup()
+                else:
+                    self.config.on_cleanup()
+        finally:
+            if self._force_task is not None:
+                self._force_task.cancel()
+                try:
+                    await self._force_task
+                except asyncio.CancelledError:
+                    pass
+                self._force_task = None
 
         self._phase = ShutdownPhase.COMPLETED
         self._shutdown_event.set()
         logger.info("Shutdown complete")
+
+    async def _force_shutdown_after_timeout(self) -> None:
+        """Force-cancel running tasks if graceful shutdown exceeds force_after."""
+        await asyncio.sleep(self.config.force_after)
+        if self._phase == ShutdownPhase.COMPLETED:
+            return
+
+        logger.error(
+            "Force shutdown deadline reached after %.1fs; cancelling %d running task(s)",
+            self.config.force_after,
+            len(self._running_tasks),
+        )
+        for task in list(self._running_tasks):
+            task.cancel()
 
     async def wait(self) -> None:
         """Wait for shutdown to complete."""

@@ -148,7 +148,7 @@ class ToolRegistry:
         Returns:
             List of tool names
         """
-        return list(self._tools.keys()) + list(self._lazy_factories.keys())
+        return sorted(set(self._tools.keys()) | set(self._lazy_factories.keys()))
 
 
 def create_default_registry() -> ToolRegistry:

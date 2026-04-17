@@ -187,7 +187,9 @@ class PluginManager:
         tools: list[Any] = []
         for plugin in self.list_plugins(enabled_only=True):
             instance = plugin.instance
-            if isinstance(instance, ToolPlugin):
+            if instance is None:
+                continue
+            if isinstance(instance, ToolPlugin) or hasattr(instance, "get_tools"):
                 tools.extend(instance.get_tools())
         return tools
 
@@ -195,7 +197,9 @@ class PluginManager:
         commands: list[Any] = []
         for plugin in self.list_plugins(enabled_only=True):
             instance = plugin.instance
-            if isinstance(instance, CommandPlugin):
+            if instance is None:
+                continue
+            if isinstance(instance, CommandPlugin) or hasattr(instance, "get_commands"):
                 commands.extend(instance.get_commands())
         return commands
 
@@ -203,7 +207,9 @@ class PluginManager:
         hooks: dict[str, list[Callable[..., Any]]] = {}
         for plugin in self.list_plugins(enabled_only=True):
             instance = plugin.instance
-            if isinstance(instance, HookPlugin):
+            if instance is None:
+                continue
+            if isinstance(instance, HookPlugin) or hasattr(instance, "get_hooks"):
                 plugin_hooks = instance.get_hooks()
                 for event, handlers in plugin_hooks.items():
                     hooks.setdefault(event, []).extend(handlers)
@@ -260,6 +266,22 @@ class LocalPluginLoader:
             return None
 
         metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+        plugin_instance = None
+        entry_file = metadata.get("entry", "plugin.py")
+        entry_path = plugin_path / entry_file
+        if entry_path.is_file():
+            module_name = (
+                f"claude_code_local_plugin_{plugin_id}_"
+                f"{abs(hash(str(entry_path.resolve())))}"
+            )
+            spec = importlib.util.spec_from_file_location(module_name, str(entry_path))
+            if spec is not None and spec.loader is not None:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                if hasattr(module, "get_plugin"):
+                    plugin_instance = module.get_plugin()
+
         return Plugin(
             metadata=PluginMetadata(
                 id=metadata.get("id", plugin_id),
@@ -270,6 +292,7 @@ class LocalPluginLoader:
                 plugin_type=PluginType.LOCAL,
             ),
             root_path=plugin_path,
+            _instance=plugin_instance,
         )
 
 

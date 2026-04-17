@@ -37,7 +37,18 @@ DEFAULT_COMPACT_THRESHOLD: int = 150000
 from claude_code.permissions import PermissionMode, PERMISSION_MODES
 
 # Constant sets using frozenset
-VALID_PROVIDERS: frozenset[str] = frozenset({"anthropic", "openai", "bedrock", "vertex", "azure"})
+VALID_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "anthropic",
+        "openai",
+        "ollama",
+        "vllm",
+        "deepseek",
+        "bedrock",
+        "vertex",
+        "azure",
+    }
+)
 VALID_PERMISSION_MODES: frozenset[str] = frozenset(PERMISSION_MODES)
 SUPPORTED_AWS_REGIONS: frozenset[str] = frozenset({
     "us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1", "ap-northeast-1"
@@ -104,6 +115,7 @@ class ProviderConfig(BaseModel):
     vertex_location: str | None = None
     azure_endpoint: str | None = None
     azure_api_version: str = DEFAULT_AZURE_API_VERSION
+    openai_base_url: str | None = None
     
     @field_validator('aws_region')
     @classmethod
@@ -159,6 +171,7 @@ class Config(BaseModel):
     vertex_location: str | None = None
     azure_endpoint: str | None = None
     azure_api_version: str = DEFAULT_AZURE_API_VERSION
+    openai_base_url: str | None = None
     
     # Behavior settings
     permission_mode: PermissionMode = PermissionMode.DEFAULT
@@ -319,6 +332,8 @@ class Config(BaseModel):
         
         Reads from standard environment variables:
         - ANTHROPIC_API_KEY
+        - OPENAI_API_KEY
+        - OPENAI_BASE_URL
         - CLAUDE_API_PROVIDER
         - CLAUDE_MODEL
         - CLAUDE_MAX_TOKENS
@@ -334,15 +349,23 @@ class Config(BaseModel):
             object.__setattr__(self, attr, value)
         
         # API settings
-        if api_key := os.getenv("ANTHROPIC_API_KEY"):
-            _set("api_key", api_key)
-        
         if provider := os.getenv("CLAUDE_API_PROVIDER"):
             if provider in VALID_PROVIDERS:
                 _set("api_provider", provider)
         
+        provider_value = str(getattr(self, "api_provider", "anthropic")).lower()
+        if provider_value == "anthropic":
+            if api_key := os.getenv("ANTHROPIC_API_KEY"):
+                _set("api_key", api_key)
+        elif provider_value in {"openai", "ollama", "vllm", "deepseek"}:
+            if api_key := os.getenv("OPENAI_API_KEY"):
+                _set("api_key", api_key)
+
         if model := os.getenv("CLAUDE_MODEL"):
             _set("model", model)
+        
+        if openai_base_url := os.getenv("OPENAI_BASE_URL"):
+            _set("openai_base_url", openai_base_url)
         
         if max_tokens := os.getenv("CLAUDE_MAX_TOKENS"):
             try:

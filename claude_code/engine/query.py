@@ -154,6 +154,7 @@ class QueryConfig:
     always_allow: list[str] = field(default_factory=list)
     always_deny: list[str] = field(default_factory=list)
     session_id: Optional[str] = None
+    working_directory: Optional[str] = None
 
 
 @dataclass 
@@ -565,7 +566,7 @@ class QueryEngine:
         
         # Create context
         context = ToolContext(
-            working_directory=os.getcwd(),
+            working_directory=self.config.working_directory or os.getcwd(),
             environment={},
             abort_signal=self.abort_event,
             permission_mode=self.config.permission_mode,
@@ -602,7 +603,7 @@ class QueryEngine:
                         is_error=True,
                         tool_use_id=tool_use.id,
                     ),
-                    duration_ms=time.time() - start_time,
+                    duration_ms=(time.time() - start_time) * 1000,
                 )
             
             # Execute
@@ -673,9 +674,23 @@ class QueryEngine:
         """Get configured hooks."""
         return getattr(self, '_hooks', [])
     
-    async def load_skill(self, skill_name: str):
+    async def load_skill(self, skill_name: str) -> dict[str, Any]:
         """Load a skill by name."""
-        pass  # Placeholder - skills loading not yet implemented
+        from claude_code.skills.registry import get_skill_registry, load_all_skills
+
+        load_all_skills(
+            project_dir=self.config.working_directory or os.getcwd(),
+            include_bundled=True,
+        )
+        registry = get_skill_registry()
+        skill = registry.get(skill_name)
+        if skill is None:
+            raise ValueError(f"Skill not found: {skill_name}")
+        return {
+            "status": "loaded",
+            "skill": skill_name,
+            "source": str(skill.source.value if hasattr(skill.source, "value") else skill.source),
+        }
     
     def set_effort(self, level: str):
         """Set effort level (low, medium, high)."""
@@ -740,5 +755,34 @@ class QueryEngine:
     
     async def resume_session(self, session_id: Optional[str] = None) -> bool:
         """Resume a previous session."""
-        pass  # Placeholder - session loading not yet implemented
+        from claude_code.engine.session import SessionManager
+
+        manager = SessionManager()
+        target_session_id = session_id
+        if target_session_id is None:
+            sessions = manager.list_sessions()
+            if not sessions:
+                return False
+            target_session_id = sessions[0].id
+
+        session = manager.load_session(target_session_id)
+        if session is None:
+            return False
+
+        restored: list[Message] = []
+        for record in session.messages:
+            restored.append(
+                Message(
+                    id=record.id,
+                    role=record.role,
+                    content=record.content,
+                    timestamp=record.timestamp,
+                    tool_call_id=record.tool_call_id,
+                    tool_name=record.tool_name,
+                )
+            )
+
+        self.messages = restored
+        self.conversation_id = session.id
+        self.config.session_id = session.id
         return True

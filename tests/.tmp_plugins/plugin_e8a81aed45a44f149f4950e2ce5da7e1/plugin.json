@@ -1,0 +1,1 @@
+{"id": "local-demo", "name": "Local Demo", "version": "0.1.0", "description": "runtime test plugin", "entry": "plugin.py"}

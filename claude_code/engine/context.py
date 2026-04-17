@@ -280,7 +280,7 @@ class ClaudeMdLoader:
             try:
                 content = filepath.read_text(encoding="utf-8").strip()
                 if content:
-                    rel_path = filepath.relative_to(self._working_dir)
+                    rel_path = Path(os.path.relpath(filepath, self._working_dir))
                     contents.append(f"# {rel_path}\n\n{content}")
             except Exception:
                 continue
