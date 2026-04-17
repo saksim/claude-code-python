@@ -354,3 +354,32 @@ CLI/REPL
 ### 10.6 当前剩余问题（按严重性）
 
 - 已完成本轮目标内问题清零；当前未发现阻塞级残留项。
+
+### 10.7 增量迭代（2026-04-17，第4轮）
+
+- [x] 修复默认工具注册表构建断点：`create_default_registry()` 不再在构建阶段一次性导入全部工具模块。
+- [x] 修复 `lsp` 工具导入路径错误：由错误的 `claude_code.tools.lsp` 改为实际实现 `claude_code.tools.analysis.lsp`。
+- [x] 将默认工具注册改为“模块路径 + 类名”懒加载规范，避免单个工具模块异常阻断整个注册表。
+- [x] 提升 registry 预加载健壮性：`preload()` 对加载失败工具做容错，确保主流程可继续。
+
+对应文件：
+
+- `claude_code/tools/registry.py`
+- `tests/test_tools_registry_runtime.py`
+
+回归验证：
+
+- `D:\code_environment\anaconda_all_css\py311\python.exe -m pytest -q -c pytest.ini tests/test_tools_registry_runtime.py tests/test_query_engine_runtime.py`
+- 结果：`12 passed`
+
+新增测试覆盖：
+
+- `tests/test_tools_registry_runtime.py`
+  - 覆盖：默认注册表构建阶段不触发模块导入（验证真正的模块级懒加载）。
+  - 覆盖：默认注册表包含关键工具名（含 `lsp` / `cron_create`）。
+  - 覆盖：`lsp` 工具可从默认注册表正常解析。
+
+本轮解决的问题：
+
+- 解决了默认注册表在运行时可能因 `LSPTool` 导入路径错误直接抛 `ImportError`、导致主链路不可用的问题。
+- 解决了“lazy 仅延迟实例化、不延迟模块导入”的实现偏差，降低初始化阶段耦合与失败面。
