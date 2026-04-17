@@ -22,8 +22,10 @@ from claude_code.tasks.types import (
 from claude_code.tasks.manager import (
     TaskManager,
     TaskEvent,
+    TaskStateTransitionError,
     get_task_manager,
     set_task_manager,
+    create_persistent_task_manager,
 )
 
 from claude_code.tasks.shell import (
@@ -34,7 +36,24 @@ from claude_code.tasks.shell import (
 from claude_code.tasks.repository import (
     TaskRepositoryConfig,
     TaskRepository,
+    RuntimeTaskRepositoryConfig,
+    RuntimeTaskRepository,
+    FileRuntimeTaskRepository,
     create_file_task_repository,
+    create_file_runtime_task_repository,
+)
+from claude_code.tasks.queue import (
+    QueueItem,
+    TaskQueue,
+    InMemoryTaskQueue,
+)
+from claude_code.tasks.factory import (
+    QueueBackend,
+    RuntimeBackend,
+    TaskBackendConfig,
+    create_task_queue,
+    create_runtime_repository,
+    create_task_manager,
 )
 
 __all__ = [
@@ -52,8 +71,10 @@ __all__ = [
     # Manager
     "TaskManager",
     "TaskEvent",
+    "TaskStateTransitionError",
     "get_task_manager",
     "set_task_manager",
+    "create_persistent_task_manager",
     
     # Shell
     "ShellTaskExecutor",
@@ -63,7 +84,24 @@ __all__ = [
     # Repository
     "TaskRepositoryConfig",
     "TaskRepository",
+    "RuntimeTaskRepositoryConfig",
+    "RuntimeTaskRepository",
+    "FileRuntimeTaskRepository",
     "create_file_task_repository",
+    "create_file_runtime_task_repository",
+    
+    # Queue
+    "QueueItem",
+    "TaskQueue",
+    "InMemoryTaskQueue",
+    
+    # Backend Factory
+    "QueueBackend",
+    "RuntimeBackend",
+    "TaskBackendConfig",
+    "create_task_queue",
+    "create_runtime_repository",
+    "create_task_manager",
 ]
 
 
