@@ -25,8 +25,8 @@
 
 ## 当前基线
 
-1. 数据文件：`docs/perf/baseline_v1.json`
-2. 摘要文档：`docs/perf/BASELINE_V1.md`
+1. 数据文件：`../../current/performance/baseline_v1.json`
+2. 摘要文档：`../../current/performance/BASELINE_V1.md`
 
 关键指标：
 

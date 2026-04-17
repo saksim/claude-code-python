@@ -32,7 +32,7 @@
 
 ## 最新性能基线（Baseline V1）
 
-来源：`docs/perf/baseline_v1.json`
+来源：`../../current/performance/baseline_v1.json`
 
 1. Startup wall time：`1109.38 ms`
 2. `QueryEngine` 单轮（stub）`p95`：`0.071 ms`
@@ -42,10 +42,10 @@
 
 ## 已产出文档
 
-1. 评估方案文档：`docs/PERFORMANCE_TOP_TIER_EVALUATION_PLAN.md`
-2. 基线摘要：`docs/perf/BASELINE_V1.md`
-3. 执行进度：`docs/perf/OPTIMIZATION_PROGRESS.md`
-4. 原始基线数据：`docs/perf/baseline_v1.json`
+1. 评估方案文档：`./PERFORMANCE_TOP_TIER_EVALUATION_PLAN.md`
+2. 基线摘要：`../../current/performance/BASELINE_V1.md`
+3. 执行进度：`./OPTIMIZATION_PROGRESS.md`
+4. 原始基线数据：`../../current/performance/baseline_v1.json`
 
 ## 下一阶段执行计划
 
@@ -64,5 +64,5 @@
 & 'D:\code_environment\anaconda_all_css\py311\python.exe' -m pytest -q
 
 # 生成基线
-& 'D:\code_environment\anaconda_all_css\py311\python.exe' scripts/perf/run_baseline.py --project-root . --iterations 20 --output docs/perf/baseline_v1.json
+& 'D:\code_environment\anaconda_all_css\py311\python.exe' scripts/perf/run_baseline.py --project-root . --iterations 20 --output docs/current/performance/baseline_v1.json
 ```

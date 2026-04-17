@@ -35,7 +35,7 @@
 
 ## 4. 最新量化结果（Baseline V1）
 
-数据源：`docs/perf/baseline_v1.json`（20 iterations, stub API）
+数据源：`./baseline_v1.json`（20 iterations, stub API）
 
 1. 语法健康：`204` 文件，`0` 语法错误。
 2. Startup wall time：`1109.38 ms`。
@@ -73,8 +73,7 @@
 
 ## 8. 关键文档索引
 
-1. 方案总览：`docs/PERFORMANCE_TOP_TIER_EVALUATION_PLAN.md`
-2. 基线摘要：`docs/perf/BASELINE_V1.md`
-3. 进度跟踪：`docs/perf/OPTIMIZATION_PROGRESS.md`
-4. 原始基线：`docs/perf/baseline_v1.json`
-
+1. 方案总览：`../../history/performance/PERFORMANCE_TOP_TIER_EVALUATION_PLAN.md`
+2. 基线摘要：`./BASELINE_V1.md`
+3. 进度跟踪：`../../history/performance/OPTIMIZATION_PROGRESS.md`
+4. 原始基线：`./baseline_v1.json`

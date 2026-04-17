@@ -2,7 +2,7 @@
 
 Date (UTC): `2026-04-16T07:49:59.935167+00:00`  
 Interpreter: `D:/code_environment/anaconda_all_css/py311/python.exe`  
-Source: [baseline_v1.json](/D:/download/gaming/new_program/claude-code-python/docs/perf/baseline_v1.json)
+Source: [baseline_v1.json](./baseline_v1.json)
 
 ## Scope
 
@@ -36,5 +36,5 @@ Source: [baseline_v1.json](/D:/download/gaming/new_program/claude-code-python/do
 & 'D:\code_environment\anaconda_all_css\py311\python.exe' scripts/perf/run_baseline.py `
   --project-root . `
   --iterations 20 `
-  --output docs/perf/baseline_v1.json
+  --output docs/current/performance/baseline_v1.json
 ```

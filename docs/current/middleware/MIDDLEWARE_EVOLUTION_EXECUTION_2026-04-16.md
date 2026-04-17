@@ -1,6 +1,6 @@
 # 中间件演进落地执行记录（持续迭代）
 
-- 关联评估报告：`docs/MIDDLEWARE_EVOLUTION_ASSESSMENT_2026-04-16.md`
+- 关联评估报告：`./MIDDLEWARE_EVOLUTION_ASSESSMENT_2026-04-16.md`
 - 执行日期：2026-04-16
 - 当前状态：Phase 0 全量完成 + Phase 1（仓储抽象）首步完成
 
