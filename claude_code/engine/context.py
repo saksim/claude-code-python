@@ -6,6 +6,7 @@ Builds context for API requests including git status, CLAUDE.md, etc.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -14,6 +15,8 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,7 +253,7 @@ class ClaudeMdLoader:
         files: list[Path] = []
 
         current = self._working_dir
-        while current and current != current.parent:
+        while True:
             md_path = current / "CLAUDE.md"
             if md_path.is_file():
                 files.append(md_path)
@@ -259,7 +262,15 @@ class ClaudeMdLoader:
                 break
             current = current.parent
 
+        files.reverse()
         return files
+
+    def _display_path(self, filepath: Path) -> str:
+        """Return display path relative to working dir when possible."""
+        try:
+            return str(filepath.relative_to(self._working_dir))
+        except ValueError:
+            return os.path.relpath(filepath, self._working_dir)
 
     def load_content(self) -> str | None:
         """Load combined CLAUDE.md content.
@@ -280,9 +291,10 @@ class ClaudeMdLoader:
             try:
                 content = filepath.read_text(encoding="utf-8").strip()
                 if content:
-                    rel_path = Path(os.path.relpath(filepath, self._working_dir))
+                    rel_path = self._display_path(filepath)
                     contents.append(f"# {rel_path}\n\n{content}")
-            except Exception:
+            except (OSError, UnicodeError) as exc:
+                logger.warning("Failed to load %s: %s", filepath, exc)
                 continue
 
         if contents:
