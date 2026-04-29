@@ -164,6 +164,15 @@ from claude_code.services.event_bus import (
     APIEvents,
     SystemEvents,
 )
+from claude_code.services.event_journal import (
+    EVENT_JOURNAL_SCHEMA_VERSION,
+    EVENT_JOURNAL_SCHEMA_KEY,
+    EventJournal,
+    EventJournalEntry,
+    SQLiteEventJournal,
+    get_event_journal,
+    set_event_journal,
+)
 
 from claude_code.services.websocket import (
     WebSocketServer,
@@ -314,6 +323,15 @@ __all__ = [
     "ToolEvents",
     "APIEvents",
     "SystemEvents",
+
+    # Event Journal
+    "EVENT_JOURNAL_SCHEMA_VERSION",
+    "EVENT_JOURNAL_SCHEMA_KEY",
+    "EventJournal",
+    "EventJournalEntry",
+    "SQLiteEventJournal",
+    "get_event_journal",
+    "set_event_journal",
     
     # WebSocket
     "WebSocketServer",

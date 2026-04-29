@@ -48,6 +48,9 @@ class SessionMemory:
 
     Provides persistent memory storage that survives across sessions.
     Useful for storing user preferences, project context, and learned information.
+
+    This store is reserved for long-term structured knowledge and should not be
+    used as a duplicate sink for active session transcripts or history archives.
     """
 
     def __init__(self, storage_dir: Path | str | None = None) -> None:
@@ -310,6 +313,35 @@ class SessionMemory:
                     updated_at=now,
                 )
             self._save()
+
+    async def set_knowledge(
+        self,
+        key: str,
+        value: Any,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Store long-term knowledge explicitly.
+
+        Use this API when saving durable, structured memory. It marks entries
+        with a ``knowledge`` tag and metadata kind.
+        """
+        merged_tags = list(tags or [])
+        if "knowledge" not in merged_tags:
+            merged_tags.append("knowledge")
+
+        merged_metadata = dict(metadata or {})
+        merged_metadata.setdefault("kind", "knowledge")
+        await self.set(key, value, tags=merged_tags, metadata=merged_metadata)
+
+    async def list_knowledge_keys(self) -> list[str]:
+        """List keys marked as long-term knowledge."""
+        async with self._lock:
+            return [
+                key
+                for key, entry in self._memory.items()
+                if "knowledge" in entry.tags or entry.metadata.get("kind") == "knowledge"
+            ]
 
 
 class MemoryNamespace:

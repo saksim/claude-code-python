@@ -15,10 +15,9 @@ from __future__ import annotations
 import asyncio
 import json
 import shlex
-import subprocess
 import time
 from pathlib import Path
-from typing import Callable, Optional, Any
+from typing import Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -123,8 +122,25 @@ class HooksManager:
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            for hook_data in data.get("hooks", []):
+
+            loaded_hooks = data.get("hooks", [])
+            if isinstance(loaded_hooks, dict):
+                # Backward compatibility with legacy {"hook_name": {...}} format.
+                loaded_hooks = [
+                    {
+                        "name": hook_name,
+                        **(hook_config if isinstance(hook_config, dict) else {}),
+                    }
+                    for hook_name, hook_config in loaded_hooks.items()
+                ]
+
+            if not isinstance(loaded_hooks, list):
+                return
+
+            self._hooks = []
+            for hook_data in loaded_hooks:
+                if not isinstance(hook_data, dict):
+                    continue
                 try:
                     hook = Hook(
                         name=hook_data["name"],
@@ -226,9 +242,29 @@ class HooksManager:
         Returns:
             List of enabled Hook objects.
         """
-        if event:
-            return [h for h in self._hooks if h.event == event and h.enabled]
-        return [h for h in self._hooks if h.enabled]
+        return self.list_hooks(event=event, include_disabled=False)
+
+    def list_hooks(
+        self,
+        event: Optional[HookEvent] = None,
+        *,
+        include_disabled: bool = False,
+    ) -> list[Hook]:
+        """List hooks with optional event/disabled filtering.
+
+        Args:
+            event: Optional event to filter by.
+            include_disabled: Include disabled hooks when True.
+
+        Returns:
+            Matching hook definitions.
+        """
+        hooks = self._hooks
+        if event is not None:
+            hooks = [hook for hook in hooks if hook.event == event]
+        if include_disabled:
+            return list(hooks)
+        return [hook for hook in hooks if hook.enabled]
     
     async def trigger(
         self,

@@ -444,6 +444,7 @@ class MCPServer:
 async def create_mcp_server(
     working_directory: str = ".",
     server_name: str = "claude-code-python",
+    tool_registry: Any | None = None,
 ) -> MCPServer:
     """Create and configure an MCP server with the full tool registry.
     
@@ -453,12 +454,11 @@ async def create_mcp_server(
     Args:
         working_directory: Working directory for tool execution
         server_name: Name of the MCP server
+        tool_registry: Optional pre-built tool registry from runtime bootstrap.
         
     Returns:
         Configured MCPServer instance ready to start
     """
-    from claude_code.tools import create_default_registry
-    
     config = MCPServerConfig(
         name=server_name,
         version=DEFAULT_SERVER_VERSION,
@@ -467,8 +467,11 @@ async def create_mcp_server(
     
     server = MCPServer(config)
     
-    registry = create_default_registry()
-    server.set_tool_registry(registry)
+    if tool_registry is None:
+        from claude_code.tools import create_default_registry
+
+        tool_registry = create_default_registry()
+    server.set_tool_registry(tool_registry)
     
     return server
 
@@ -476,6 +479,7 @@ async def create_mcp_server(
 async def run_mcp_server(
     working_directory: str = ".",
     server_name: str = "claude-code-python",
+    tool_registry: Any | None = None,
 ) -> None:
     """Run the MCP server in STDIO mode.
     
@@ -485,8 +489,13 @@ async def run_mcp_server(
     Args:
         working_directory: Working directory for tool execution
         server_name: Name of the MCP server
+        tool_registry: Optional pre-built tool registry from runtime bootstrap.
     """
-    server = await create_mcp_server(working_directory, server_name)
+    server = await create_mcp_server(
+        working_directory=working_directory,
+        server_name=server_name,
+        tool_registry=tool_registry,
+    )
     await server.start_stdio()
 
 

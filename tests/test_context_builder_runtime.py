@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_code.engine.context import ClaudeMdLoader
+from claude_code.engine.context import ClaudeMdLoader, ContextBuilder
 
 
 def _cleanup_tree(path: Path) -> None:
@@ -94,5 +94,35 @@ def test_claude_md_loader_skips_single_unreadable_file(monkeypatch: pytest.Monke
         assert content is not None
         assert "nested text" in content
         assert "root text" not in content
+    finally:
+        _cleanup_tree(base)
+
+
+def test_context_builder_user_context_keeps_session_history_memory_boundaries():
+    base = Path("tests") / ".tmp_context" / f"context_{uuid.uuid4().hex}"
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        context = ContextBuilder(base).get_user_context()
+
+        assert "currentDate" in context
+        assert "claudeMd" not in context
+        assert "session" not in context
+        assert "history" not in context
+        assert "memory" not in context
+    finally:
+        _cleanup_tree(base)
+
+
+def test_context_builder_includes_claude_md_without_injecting_history_or_memory():
+    base = Path("tests") / ".tmp_context" / f"context_md_{uuid.uuid4().hex}"
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        (base / "CLAUDE.md").write_text("project instructions", encoding="utf-8")
+        context = ContextBuilder(base).get_user_context()
+
+        assert "claudeMd" in context
+        assert "project instructions" in str(context["claudeMd"])
+        assert "history" not in context
+        assert "memory" not in context
     finally:
         _cleanup_tree(base)

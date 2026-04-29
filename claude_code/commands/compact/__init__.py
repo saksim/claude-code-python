@@ -9,6 +9,7 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from claude_code.commands.base import Command, CommandContext, CommandResult, CommandType
@@ -97,36 +98,74 @@ class ResumeCommand(Command):
             CommandResult with resume information.
         """
         session_id = args.strip()
-        
-        if context.session is None:
+        engine = context.engine
+        if engine is None:
+            return CommandResult(success=False, error="Engine not available")
+
+        # No args: show recent resumable sessions.
+        if not session_id:
+            sessions = self._list_sessions(engine)
+            if not sessions:
+                return CommandResult(content="No previous sessions found.")
+
+            lines: list[str] = ["# Available Sessions\n"]
+            for session in sessions[:10]:
+                session_time = self._format_ts(session.last_active)
+                lines.append(f"\n## {session.id}")
+                lines.append(f"Last Active: {session_time}")
+                lines.append(f"Messages: {session.message_count}")
+                lines.append(f"Working Directory: {session.working_directory}")
+            lines.append("\nUse /resume <session-id> to continue a session.")
+            return CommandResult(content="\n".join(lines))
+
+        if not hasattr(engine, "resume_session"):
             return CommandResult(
                 success=False,
-                error="Session not available",
+                error="Current engine does not support session resume",
             )
-        
-        if session_id:
-            return CommandResult(
-                content=f"""Resuming session: {session_id}
 
-Use /resume without arguments to see available sessions.""",
-            )
-        
-        from claude_code.engine.session import SessionManager
-        
-        sessions = SessionManager.list_sessions(context.working_directory)
-        
-        if not sessions:
+        try:
+            resumed = await engine.resume_session(session_id)
+        except Exception as exc:
             return CommandResult(
-                content="No previous sessions found.",
+                success=False,
+                error=f"Failed to resume session '{session_id}': {exc}",
             )
-        
-        lines: list[str] = ["# Available Sessions\n"]
-        for session in sessions[:10]:
-            lines.append(f"\n## {session['id']}")
-            lines.append(f"Created: {session.get('created_at', 'unknown')}")
-            lines.append(f"Messages: {session.get('message_count', 0)}")
-        
-        return CommandResult(content="\n".join(lines))
+
+        if not resumed:
+            return CommandResult(
+                success=False,
+                error=f"Session not found or unreadable: {session_id}",
+            )
+
+        active_session = getattr(engine.config, "session_id", session_id)
+        message_count = len(getattr(engine, "messages", []))
+        working_directory = getattr(engine.config, "working_directory", context.working_directory)
+        return CommandResult(
+            content=(
+                "# Session Resumed\n\n"
+                f"Session ID: {active_session}\n"
+                f"Messages Restored: {message_count}\n"
+                f"Working Directory: {working_directory}"
+            )
+        )
+
+    def _list_sessions(self, engine: Any) -> list[Any]:
+        """List resumable sessions from engine-bound manager or fallback manager."""
+        from claude_code.engine.session import SessionManager
+
+        manager = getattr(engine, "session_manager", None)
+        if not isinstance(manager, SessionManager):
+            manager = SessionManager()
+        return manager.list_sessions()
+
+    @staticmethod
+    def _format_ts(ts: float) -> str:
+        """Format unix timestamp for human-readable output."""
+        try:
+            return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return "unknown"
 
 
 class RewindCommand(Command):

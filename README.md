@@ -64,6 +64,26 @@ export CLAUDE_MODEL=qwen2.5:14b
 - `ollama` / `vllm` 允许本地模型路径，不强制真实 API Key
 - PowerShell 请将 `export` 改为 `$env:变量名="值"`
 
+### Windows 推荐启动（避免 WindowsApps stub）
+
+Windows 上不要依赖 `C:\Users\<you>\AppData\Local\Microsoft\WindowsApps\python.exe` 这类 Store alias stub。
+
+建议优先使用：
+
+```powershell
+py -3 -m claude_code.main --doctor
+py -3 -m claude_code.main
+```
+
+或显式使用虚拟环境解释器：
+
+```powershell
+.\.venv\Scripts\python.exe -m claude_code.main --doctor
+.\.venv\Scripts\python.exe -m claude_code.main
+```
+
+`--doctor` 会输出解释器来源与风险提示；若命中 WindowsApps stub，会给出明确警告与替代启动命令。
+
 ### 3. 常用启动方式
 
 ```bash
@@ -87,6 +107,9 @@ echo "帮我总结这段代码" | python -m claude_code.main --pipe
 
 # 作为 MCP 服务器启动
 python -m claude_code.main --mcp-serve
+
+# 启动本地 daemon / API 控制面（P1-01）
+python -m claude_code.main --daemon-serve --daemon-host 127.0.0.1 --daemon-port 8787
 ```
 
 ## 核心能力概览
@@ -132,6 +155,8 @@ claude-code-python/
 |---|---|---|---|
 | `README.md` | 总入口 | 第一次进入仓库 | 唯一导航入口 |
 | `docs/current/architecture/ARCHITECTURE_EVALUATION_2026-04-16.md` | 架构现状快照 | 想知道项目现在整体状态 | 架构主入口 |
+| `docs/current/architecture/CLAUDE_CODE_SUPERSEDE_STRATEGY_2026-04-29.md` | 产品战略与超车路线图 | 想知道项目如何从“可用底盘”走到“超越 Claude Code” | 战略主入口 |
+| `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` | 执行计划与任务卡单 | 想直接开工并明确每张卡的研发范围、完成标准、测试深度 | 执行主入口 |
 | `docs/current/middleware/MIDDLEWARE_EVOLUTION_EXECUTION_2026-04-16.md` | 任务/中间件落地记录 | 想知道任务系统已改到哪一步 | 中间件现状主入口 |
 | `docs/current/performance/PERFORMANCE_ONE_PAGER.md` | 性能一页纸 | 想快速看性能状态 | 性能主入口 |
 | `docs/current/reference/MCP.md` | MCP 使用手册 | 想把仓库作为 MCP server 接入 | MCP 主入口 |
@@ -150,6 +175,8 @@ claude-code-python/
 为避免“同一主题多个入口同时有效”，后续统一按下面的主入口理解：
 
 - 架构现状：`docs/current/architecture/ARCHITECTURE_EVALUATION_2026-04-16.md`
+- 产品战略 / 超越 Claude Code 路线图：`docs/current/architecture/CLAUDE_CODE_SUPERSEDE_STRATEGY_2026-04-29.md`
+- 执行计划 / 任务卡单：`docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
 - 架构历史问题与修复备选：`docs/history/architecture/ARCHITECTURE_REVIEW.md` + `docs/history/architecture/FIX_PROPOSALS.md`
 - 任务/中间件当前落地状态：`docs/current/middleware/MIDDLEWARE_EVOLUTION_EXECUTION_2026-04-16.md`
 - 任务/中间件演进决策依据：`docs/current/middleware/MIDDLEWARE_EVOLUTION_ASSESSMENT_2026-04-16.md`
@@ -192,6 +219,18 @@ claude-code-python/
 ```bash
 # 运行测试
 python -m pytest -q -c pytest.ini
+
+# 运行 Phase 0 主链回归门禁（提交前/合并前）
+python scripts/run_phase0_gate.py
+
+# 运行 Phase 1 控制面回归门禁（P1-01）
+python scripts/run_p1_control_plane_gate.py
+
+# 运行 Phase 1 事件日志回归门禁（P1-02）
+python scripts/run_p1_event_journal_gate.py
+
+# 运行 Phase 1 SQLite 状态后端回归门禁（P1-03）
+python scripts/run_p1_sqlite_state_backend_gate.py
 
 # 语法检查
 python scripts/check_syntax.py --root claude_code
@@ -259,4 +298,3 @@ python -m pytest -q -c pytest.ini
 - 想追溯历史问题和修复方案，再看历史文档
 
 这就是当前仓库文档的推荐阅读顺序和维护边界。
-
