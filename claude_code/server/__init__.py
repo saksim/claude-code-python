@@ -9,6 +9,12 @@ from claude_code.server.control_plane import (
     DaemonUnavailableError,
     run_control_plane_daemon,
 )
+from claude_code.server.ide_adapter import (
+    IDEWorkspaceSnapshot,
+    JetBrainsClientAdapter,
+    JetBrainsWorkspaceSnapshot,
+    VSCodeClientAdapter,
+)
 
 __all__ = [
     "ControlPlaneClient",
@@ -17,5 +23,9 @@ __all__ = [
     "DaemonServerConfig",
     "DaemonTimeoutError",
     "DaemonUnavailableError",
+    "IDEWorkspaceSnapshot",
+    "JetBrainsClientAdapter",
+    "JetBrainsWorkspaceSnapshot",
+    "VSCodeClientAdapter",
     "run_control_plane_daemon",
 ]

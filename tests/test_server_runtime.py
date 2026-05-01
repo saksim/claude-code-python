@@ -257,3 +257,167 @@ def test_control_plane_events_endpoints(tmp_path: Path):
         replayed = client.replay_events(session_id=session_id, event_type="tool.completed", limit=10)
         assert replayed["events"]
         assert all(item["event_type"] == "tool.completed" for item in replayed["events"])
+
+
+def test_control_plane_github_ci_workflow_endpoint(tmp_path: Path, monkeypatch):
+    runtime, _ = _build_runtime(tmp_path)
+
+    captured: dict[str, object] = {}
+
+    class _FakeWorkflowService:
+        def run_workflow(self, **kwargs):
+            captured.update(kwargs)
+            return {
+                "workflow_id": "wf-1",
+                "status": "completed",
+                "steps": [],
+                "working_directory": kwargs["working_directory"],
+                "headless_ci": kwargs["headless_ci"],
+            }
+
+    import claude_code.server.control_plane as control_plane_mod
+
+    monkeypatch.setattr(control_plane_mod, "GitHubCIWorkflowService", _FakeWorkflowService)
+
+    with _running_daemon(runtime) as daemon:
+        client = ControlPlaneClient(daemon.base_url, timeout_seconds=3.0)
+        payload = client.run_github_ci_workflow(
+            issue_reference="#124",
+            plan_summary="link issue to PR",
+            branch_name="codex/p2-04-124",
+            base_branch="main",
+            ci_commands=["python -m pytest -q"],
+            headless_ci=True,
+            allow_dirty_repo=False,
+            push_remote=False,
+            create_pull_request=False,
+        )
+
+    assert payload["workflow"]["status"] == "completed"
+    assert captured["working_directory"] == str(tmp_path)
+    assert captured["issue_reference"] == "#124"
+    assert captured["create_pull_request"] is False
+
+
+def test_control_plane_github_ci_workflow_failure_maps_error(tmp_path: Path, monkeypatch):
+    runtime, _ = _build_runtime(tmp_path)
+
+    from claude_code.services.github_ci_workflow import GitHubCIWorkflowError
+    import claude_code.server.control_plane as control_plane_mod
+
+    class _FailingWorkflowService:
+        def run_workflow(self, **kwargs):
+            raise GitHubCIWorkflowError(
+                "network down",
+                code="network_failure",
+                status_code=503,
+                details={"reason": "dns"},
+                step="pr",
+            )
+
+    monkeypatch.setattr(control_plane_mod, "GitHubCIWorkflowService", _FailingWorkflowService)
+
+    with _running_daemon(runtime) as daemon:
+        client = ControlPlaneClient(daemon.base_url, timeout_seconds=3.0)
+        with pytest.raises(DaemonResponseError) as exc_info:
+            client.run_github_ci_workflow(
+                issue_reference="#125",
+                push_remote=True,
+                create_pull_request=True,
+            )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.code == "network_failure"
+
+
+def test_control_plane_org_policy_audit_endpoint(tmp_path: Path):
+    runtime, _ = _build_runtime(tmp_path)
+
+    with _running_daemon(runtime) as daemon:
+        client = ControlPlaneClient(daemon.base_url, timeout_seconds=3.0)
+        evaluate = client.evaluate_org_policy(
+            tool_name="write",
+            operation="repo:edit",
+            payload={"content": "hello", "token": "sk-secret"},
+            actor="dev-bot",
+            policies=[
+                {
+                    "id": "approve-write",
+                    "effect": "require_approval",
+                    "tool_pattern": "write",
+                    "operation_pattern": "*",
+                    "priority": 10,
+                }
+            ],
+            create_approval=True,
+        )
+        decision = evaluate["policy_decision"]
+        assert decision["allowed"] is False
+        assert decision["decision"] == "approval_pending"
+        approval_id = decision["approval"]["approval_id"]
+        assert decision["payload_redacted"]["token"] == "***REDACTED***"
+
+        listed = client.list_org_approvals(status="pending", limit=10)
+        assert listed["approvals"]
+        assert listed["approvals"][0]["approval_id"] == approval_id
+
+        decided = client.decide_org_approval(
+            approval_id=approval_id,
+            decision="approve",
+            decided_by="sec-admin",
+            reason="approved for release",
+        )
+        assert decided["approval"]["status"] == "approved"
+
+        allowed = client.evaluate_org_policy(
+            tool_name="write",
+            operation="repo:edit",
+            payload={"content": "hello", "token": "sk-secret"},
+            actor="dev-bot",
+            create_approval=True,
+        )
+        assert allowed["policy_decision"]["allowed"] is True
+        assert allowed["policy_decision"]["decision"] == "allowed_by_approval"
+
+        audit_events = client.list_org_audit_events(
+            event_type="org_policy.evaluated",
+            limit=20,
+        )
+        assert audit_events["events"]
+
+        report = client.get_org_policy_report(limit=50)
+        summary = report["report"]["summary"]
+        assert summary["rule_count"] >= 1
+        assert summary["approval_total"] >= 1
+
+
+def test_control_plane_org_policy_audit_failure_maps_error(tmp_path: Path):
+    runtime, _ = _build_runtime(tmp_path)
+
+    with _running_daemon(runtime) as daemon:
+        client = ControlPlaneClient(daemon.base_url, timeout_seconds=3.0)
+
+        with pytest.raises(DaemonResponseError) as missing_exc:
+            client.decide_org_approval(
+                approval_id="apr-missing",
+                decision="approve",
+                decided_by="sec-admin",
+            )
+        assert missing_exc.value.status_code == 404
+        assert missing_exc.value.code == "approval_not_found"
+
+        with pytest.raises(DaemonResponseError) as validation_exc:
+            client.evaluate_org_policy(
+                tool_name="write",
+                operation="repo:edit",
+                payload={"a": 1},
+                policies=[
+                    {
+                        "id": "bad-rule",
+                        "effect": "unsupported",
+                        "tool_pattern": "write",
+                    }
+                ],
+            )
+        assert validation_exc.value.status_code == 400
+        assert validation_exc.value.code == "validation_error"

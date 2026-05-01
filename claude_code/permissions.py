@@ -41,6 +41,15 @@ _STRICT_DENY_PREFIXES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
+class PermissionEvaluation:
+    """Structured permission decision for runtime audit and diagnostics."""
+
+    tool_name: str
+    allowed: bool
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class ToolPermissionContext:
     """Simplified permission context following Claw design.
     
@@ -67,25 +76,7 @@ class ToolPermissionContext:
         Returns:
             True if tool should be blocked
         """
-        lowered = tool_name.lower()
-        
-        # Check deny list
-        if lowered in self.deny_names:
-            return True
-        
-        for prefix in self.deny_prefixes:
-            if lowered.startswith(prefix.lower()):
-                return True
-        
-        # Check allow list
-        if lowered in self.allow_names:
-            return False
-        
-        for prefix in self.allow_prefixes:
-            if lowered.startswith(prefix.lower()):
-                return False
-        
-        return not self.default_allow
+        return not self.evaluate(tool_name).allowed
     
     def allows(self, tool_name: str) -> bool:
         """Check if tool execution is allowed.
@@ -96,7 +87,31 @@ class ToolPermissionContext:
         Returns:
             True if tool is allowed
         """
-        return not self.blocks(tool_name)
+        return self.evaluate(tool_name).allowed
+
+    def evaluate(self, tool_name: str) -> PermissionEvaluation:
+        """Return structured allow/deny decision with reason."""
+        lowered = tool_name.lower()
+
+        if lowered in self.deny_names:
+            return PermissionEvaluation(tool_name=tool_name, allowed=False, reason="deny_name")
+
+        for prefix in self.deny_prefixes:
+            if lowered.startswith(prefix.lower()):
+                return PermissionEvaluation(tool_name=tool_name, allowed=False, reason="deny_prefix")
+
+        if lowered in self.allow_names:
+            return PermissionEvaluation(tool_name=tool_name, allowed=True, reason="allow_name")
+
+        for prefix in self.allow_prefixes:
+            if lowered.startswith(prefix.lower()):
+                return PermissionEvaluation(tool_name=tool_name, allowed=True, reason="allow_prefix")
+
+        return PermissionEvaluation(
+            tool_name=tool_name,
+            allowed=bool(self.default_allow),
+            reason="default_allow" if self.default_allow else "default_deny",
+        )
     
     @classmethod
     def from_rules(
@@ -221,7 +236,11 @@ class PermissionChecker:
         Returns:
             True if tool is allowed to execute
         """
-        return self._context.allows(tool_name)
+        return self.evaluate(tool_name).allowed
+
+    def evaluate(self, tool_name: str) -> PermissionEvaluation:
+        """Return structured permission decision for a tool."""
+        return self._context.evaluate(tool_name)
     
     def check_or_raise(self, tool_name: str) -> None:
         """Check permission, raise exception if not allowed.
@@ -300,6 +319,7 @@ def create_permission_checker(
 __all__ = [
     "PermissionMode",
     "PERMISSION_MODES",
+    "PermissionEvaluation",
     "ToolPermissionContext",
     "PermissionChecker",
     "create_permission_checker",

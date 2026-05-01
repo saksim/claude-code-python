@@ -58,6 +58,24 @@ class RuntimeContext:
 
 
 @dataclass(frozen=True, slots=True)
+class DaemonClientMode:
+    """Resolved daemon thin-client mode for CLI query paths."""
+
+    enabled: bool
+    base_url: str
+    timeout_seconds: float
+    required: bool
+
+
+def _resolve_memory_scope(raw_scope: str | None) -> str:
+    """Resolve runtime memory scope with safe fallback."""
+    candidate = (raw_scope or "").strip().lower()
+    if candidate in {"user", "project", "local"}:
+        return candidate
+    return "project"
+
+
+@dataclass(frozen=True, slots=True)
 class InterpreterDiagnostics:
     """Interpreter source diagnostics for doctor output."""
 
@@ -310,6 +328,22 @@ Communication style:
 - Explain what you're doing, not just what you did
 - When stuck, explain the issue and suggest alternatives""",
     ]
+
+    runtime_scope = _resolve_memory_scope(os.getenv("CLAUDE_MEMORY_SCOPE"))
+    memory = get_memory()
+    memory_snapshot = memory.snapshot_scoped(
+        runtime_scope,
+        working_directory=working_dir or os.getcwd(),
+        limit=12,
+    )
+    if memory_snapshot:
+        snapshot_lines = [
+            "Active memory snapshot:",
+            f"- scope: {runtime_scope}",
+        ]
+        for key, value in memory_snapshot.items():
+            snapshot_lines.append(f"- {key}: {value}")
+        parts.append("\n".join(snapshot_lines))
     
     # Add context parts
     context_parts = builder.build_system_prompt_parts()
@@ -373,6 +407,7 @@ def create_runtime(
         always_allow=list(app_config.always_allow),
         always_deny=list(app_config.always_deny),
         working_directory=resolved_working_dir,
+        memory_scope=_resolve_memory_scope(os.getenv("CLAUDE_MEMORY_SCOPE")),
     )
 
     tool_registry = create_default_registry()
@@ -449,6 +484,77 @@ def create_engine(
     """
     runtime = create_runtime(model=model, working_dir=working_dir)
     return runtime.query_engine
+
+
+def _build_default_daemon_url(host: str, port: int) -> str:
+    """Build daemon base URL from host/port."""
+    return f"http://{host}:{port}"
+
+
+def _resolve_daemon_client_mode(args: argparse.Namespace) -> DaemonClientMode:
+    """Resolve daemon thin-client mode from CLI args and environment."""
+    env_url = (os.getenv("CLAUDE_DAEMON_URL") or "").strip()
+    cli_url = (args.daemon_url or "").strip()
+    default_url = _build_default_daemon_url(args.daemon_host, args.daemon_port)
+    base_url = cli_url or env_url or default_url
+    enabled = bool(args.daemon_client or cli_url or env_url)
+    return DaemonClientMode(
+        enabled=enabled,
+        base_url=base_url,
+        timeout_seconds=float(args.daemon_timeout),
+        required=bool(args.daemon_required),
+    )
+
+
+async def _query_via_daemon(
+    query: str,
+    *,
+    base_url: str,
+    timeout_seconds: float,
+) -> str:
+    """Execute a single query through daemon control-plane client."""
+    from claude_code.server.control_plane import ControlPlaneClient
+
+    client = ControlPlaneClient(base_url, timeout_seconds=timeout_seconds)
+    response = await asyncio.to_thread(client.query, query)
+    return str(response.get("output", ""))
+
+
+async def run_pipe_mode_daemon(
+    *,
+    base_url: str,
+    timeout_seconds: float,
+) -> int:
+    """Run pipe mode via daemon thin client."""
+    user_input = sys.stdin.read()
+    if not user_input.strip():
+        return 0
+    output = await _query_via_daemon(
+        user_input,
+        base_url=base_url,
+        timeout_seconds=timeout_seconds,
+    )
+    if output:
+        sys.stdout.write(output)
+        sys.stdout.flush()
+    return 0
+
+
+async def run_single_query_daemon(
+    query: str,
+    *,
+    base_url: str,
+    timeout_seconds: float,
+) -> int:
+    """Run single query mode via daemon thin client."""
+    output = await _query_via_daemon(
+        query,
+        base_url=base_url,
+        timeout_seconds=timeout_seconds,
+    )
+    if output:
+        print(output)
+    return 0
 
 
 async def run_repl(
@@ -686,6 +792,27 @@ def main() -> None:
         default=30.0,
         help="Daemon request timeout in seconds (default: 30.0)",
     )
+
+    parser.add_argument(
+        "--daemon-client",
+        action="store_true",
+        help="Use local daemon/API control plane as thin client for non-REPL query paths",
+    )
+
+    parser.add_argument(
+        "--daemon-url",
+        default=None,
+        help=(
+            "Daemon base URL for thin-client mode "
+            "(default from CLAUDE_DAEMON_URL or --daemon-host/--daemon-port)"
+        ),
+    )
+
+    parser.add_argument(
+        "--daemon-required",
+        action="store_true",
+        help="Fail instead of falling back to local runtime when daemon thin-client call fails",
+    )
     
     parser.add_argument(
         "--mcp-name",
@@ -757,8 +884,29 @@ def main() -> None:
     # Initialize commands
     setup_default_commands()
     
+    daemon_client_mode = _resolve_daemon_client_mode(args)
+
     # Pipe mode
     if args.pipe:
+        if daemon_client_mode.enabled:
+            try:
+                exit_code = asyncio.run(
+                    run_pipe_mode_daemon(
+                        base_url=daemon_client_mode.base_url,
+                        timeout_seconds=daemon_client_mode.timeout_seconds,
+                    )
+                )
+                sys.exit(exit_code)
+            except Exception as exc:
+                if daemon_client_mode.required:
+                    print(f"Error: daemon thin-client request failed: {exc}", file=sys.stderr)
+                    sys.exit(1)
+                if args.verbose:
+                    print(
+                        f"[daemon-fallback] thin-client request failed, fallback to local runtime: {exc}",
+                        file=sys.stderr,
+                    )
+
         exit_code = asyncio.run(run_pipe_mode(
             model=args.model,
             verbose=args.verbose,
@@ -770,6 +918,26 @@ def main() -> None:
     
     if query:
         # Single query mode
+        if daemon_client_mode.enabled:
+            try:
+                exit_code = asyncio.run(
+                    run_single_query_daemon(
+                        query=query,
+                        base_url=daemon_client_mode.base_url,
+                        timeout_seconds=daemon_client_mode.timeout_seconds,
+                    )
+                )
+                sys.exit(exit_code)
+            except Exception as exc:
+                if daemon_client_mode.required:
+                    print(f"Error: daemon thin-client request failed: {exc}", file=sys.stderr)
+                    sys.exit(1)
+                if args.verbose:
+                    print(
+                        f"[daemon-fallback] thin-client request failed, fallback to local runtime: {exc}",
+                        file=sys.stderr,
+                    )
+
         exit_code = asyncio.run(run_single_query(
             query=query,
             model=args.model,

@@ -170,6 +170,7 @@ class TaskManager:
         tools: Optional[list] = None,
         background: bool = True,
         idempotency_key: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> AgentTask:
         """Create an agent task."""
         if idempotency_key:
@@ -190,6 +191,8 @@ class TaskManager:
             tools=tools,
             is_backgrounded=background,
         )
+        if metadata:
+            task.metadata.update(dict(metadata))
         if idempotency_key:
             task.metadata["idempotency_key"] = idempotency_key
             self._idempotency_index[idempotency_key] = task.id

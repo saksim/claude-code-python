@@ -110,6 +110,10 @@ python -m claude_code.main --mcp-serve
 
 # 启动本地 daemon / API 控制面（P1-01）
 python -m claude_code.main --daemon-serve --daemon-host 127.0.0.1 --daemon-port 8787
+
+# CLI 以 thin-client 走 daemon（P1-06）
+python -m claude_code.main --daemon-client "explain current repo status"
+echo "summarize changed files" | python -m claude_code.main --pipe --daemon-client
 ```
 
 ## 核心能力概览
@@ -232,6 +236,313 @@ python scripts/run_p1_event_journal_gate.py
 # 运行 Phase 1 SQLite 状态后端回归门禁（P1-03）
 python scripts/run_p1_sqlite_state_backend_gate.py
 
+# 运行 Phase 1 Active Memory 回归门禁（P1-04）
+python scripts/run_p1_active_memory_gate.py
+
+# 运行 Phase 1 Hook/Permission/Audit 收敛门禁（P1-05）
+python scripts/run_p1_hook_permission_audit_gate.py
+
+# 运行 Phase 1 CLI thin-client 迁移门禁（P1-06）
+python scripts/run_p1_cli_thin_client_gate.py
+
+# 运行 Phase 2 多 Agent Supervisor 门禁（P2-01）
+python scripts/run_p2_multi_agent_supervisor_gate.py
+
+# 运行 Phase 2 Artifact Bus 门禁（P2-02）
+python scripts/run_p2_artifact_bus_gate.py
+
+# 运行 Phase 2 IDE 集成门禁（P2-03）
+python scripts/run_p2_ide_integration_gate.py
+
+# 运行 Phase 2 GitHub/CI workflow 门禁（P2-04）
+python scripts/run_p2_github_ci_workflow_gate.py
+
+# 运行 Phase 2 组织策略与审计门禁（P2-05）
+python scripts/run_p2_org_policy_audit_gate.py
+
+# 运行 Phase 2 Agent 运行时一致性门禁（P2-07）
+python scripts/run_p2_agent_runtime_parity_gate.py
+
+# 运行 Phase 2 自定义 Agent 目录加载门禁（P2-08）
+python scripts/run_p2_custom_agents_loader_gate.py
+
+# 运行 Phase 2 JetBrains IDE 集成门禁（P2-10）
+python scripts/run_p2_jetbrains_ide_integration_gate.py
+
+# 运行 Phase 0-2 Linux 统一验尸门禁（P2-06）
+python scripts/run_linux_unified_gate.py
+
+# 运行 Phase 2 Linux 统一验尸执行门禁（P2-09，Linux 执行）
+python scripts/run_p2_linux_unified_execution_gate.py --dry-run
+python scripts/run_p2_linux_unified_execution_gate.py --continue-on-failure
+# 分片并行示例（3 个 job 中的第 2 片）
+python scripts/run_p2_linux_unified_execution_gate.py --shard-total 3 --shard-index 2 --continue-on-failure
+
+# 聚合多分片 summary 并给出全局通过/失败判定（P2-12，Linux 回收阶段执行）
+python scripts/run_p2_linux_shard_aggregation_gate.py --artifacts-dir .claude/reports
+python scripts/run_p2_linux_shard_aggregation_gate.py --summary-glob ".claude/reports/**/summary.json"
+
+# 从 merged summary 发布最终报告（P2-13，Linux 回收阶段执行）
+python scripts/run_p2_linux_report_publish_gate.py --merged-summary .claude/reports/linux_unified_gate/merged_summary.json
+python scripts/run_p2_linux_report_publish_gate.py --merged-summary .claude/reports/linux_unified_gate/merged_summary.json --output-json .claude/reports/linux_unified_gate/final_report.json --output-markdown .claude/reports/linux_unified_gate/final_report.md
+
+# 一键串联执行->汇总->发布全链门禁（P2-14，Linux 编排入口）
+python scripts/run_p2_linux_unified_pipeline_gate.py --dry-run
+python scripts/run_p2_linux_unified_pipeline_gate.py --continue-on-failure --fail-fast
+# 仅做汇总+发布（跳过执行阶段）
+python scripts/run_p2_linux_unified_pipeline_gate.py --skip-execution --summary-glob ".claude/reports/**/summary.json"
+
+# 生成 Linux 分片执行计划（P2-15，供 CI fan-out job 直接消费）
+python scripts/run_p2_linux_shard_plan_gate.py --shard-total 4 --dry-run --print-commands
+python scripts/run_p2_linux_shard_plan_gate.py --shard-total 4 --output .claude/reports/linux_unified_gate/shard_plan.json --continue-on-failure -- -k runtime
+
+# 生成 Linux CI matrix 产物（P2-16，供 CI matrix 直接消费）
+python scripts/run_p2_linux_ci_matrix_gate.py --shard-plan .claude/reports/linux_unified_gate/shard_plan.json --dry-run --print-matrix
+python scripts/run_p2_linux_ci_matrix_gate.py --shard-plan .claude/reports/linux_unified_gate/shard_plan.json --output .claude/reports/linux_unified_gate/ci_matrix.json --skip-empty-shards
+
+# 生成 Linux CI workflow 计划产物（P2-17，供 fan-out/fan-in job 直接消费）
+python scripts/run_p2_linux_ci_workflow_plan_gate.py --ci-matrix .claude/reports/linux_unified_gate/ci_matrix.json --dry-run --print-plan
+python scripts/run_p2_linux_ci_workflow_plan_gate.py --ci-matrix .claude/reports/linux_unified_gate/ci_matrix.json --output .claude/reports/linux_unified_gate/ci_workflow_plan.json
+
+# 将 workflow 计划渲染为 GitHub Actions YAML（P2-18，供 CI 直接执行）
+python scripts/run_p2_linux_ci_workflow_yaml_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --dry-run --print-yaml
+python scripts/run_p2_linux_ci_workflow_yaml_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --output-workflow .github/workflows/linux_unified_gate.yml --output-metadata .claude/reports/linux_unified_gate/ci_workflow_render.json
+
+# 校验/同步 workflow 渲染产物漂移（P2-19，防止 plan->yaml 漂移）
+python scripts/run_p2_linux_ci_workflow_sync_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --workflow-path .github/workflows/linux_unified_gate.yml --metadata-path .claude/reports/linux_unified_gate/ci_workflow_render.json --print-diff
+python scripts/run_p2_linux_ci_workflow_sync_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --workflow-path .github/workflows/linux_unified_gate.yml --metadata-path .claude/reports/linux_unified_gate/ci_workflow_render.json --write
+
+# 校验/规范化 workflow 计划中的命令契约（P2-20，防止 command/parts/路径 漂移）
+python scripts/run_p2_linux_ci_workflow_command_guard_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_command_guard_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --write --output .claude/reports/linux_unified_gate/ci_workflow_command_guard.json
+
+# 汇总 workflow 漂移 + 命令 + 元数据血缘治理（P2-21，生成单一治理结论）
+python scripts/run_p2_linux_ci_workflow_governance_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --workflow-path .github/workflows/linux_unified_gate.yml --metadata-path .claude/reports/linux_unified_gate/ci_workflow_render.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_governance_gate.py --ci-workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --workflow-path .github/workflows/linux_unified_gate.yml --metadata-path .claude/reports/linux_unified_gate/ci_workflow_render.json --output .claude/reports/linux_unified_gate/ci_workflow_governance.json
+
+# 发布治理结论为 CI 可消费决策（P2-22，生成 should_execute_workflow 与发布报告）
+python scripts/run_p2_linux_ci_workflow_governance_publish_gate.py --governance-report .claude/reports/linux_unified_gate/ci_workflow_governance.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_governance_publish_gate.py --governance-report .claude/reports/linux_unified_gate/ci_workflow_governance.json --output-json .claude/reports/linux_unified_gate/ci_workflow_governance_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_governance_publish.md
+
+# 将治理发布结果收敛为执行决策闸门（P2-23，统一 execute/blocked 判定与退出策略）
+python scripts/run_p2_linux_ci_workflow_decision_gate.py --governance-publish .claude/reports/linux_unified_gate/ci_workflow_governance_publish.json --workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --workflow-path .github/workflows/linux_unified_gate.yml --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_decision_gate.py --governance-publish .claude/reports/linux_unified_gate/ci_workflow_governance_publish.json --workflow-plan .claude/reports/linux_unified_gate/ci_workflow_plan.json --workflow-path .github/workflows/linux_unified_gate.yml --on-block skip --output-json .claude/reports/linux_unified_gate/ci_workflow_execution_decision.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_execution_decision.md
+
+# 将执行决策收敛为可调度命令契约（P2-24，统一 dispatch-ready/blocked 与 gh workflow run 命令）
+python scripts/run_p2_linux_ci_workflow_dispatch_gate.py --execution-decision .claude/reports/linux_unified_gate/ci_workflow_execution_decision.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_dispatch_gate.py --execution-decision .claude/reports/linux_unified_gate/ci_workflow_execution_decision.json --workflow-ref main --output-json .claude/reports/linux_unified_gate/ci_workflow_dispatch.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_dispatch.md
+
+# 执行调度契约并输出最终执行回执（P2-25，统一 dispatched/blocked/fail 的执行结果）
+python scripts/run_p2_linux_ci_workflow_dispatch_execution_gate.py --dispatch-report .claude/reports/linux_unified_gate/ci_workflow_dispatch.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_dispatch_execution_gate.py --dispatch-report .claude/reports/linux_unified_gate/ci_workflow_dispatch.json --project-root . --output-json .claude/reports/linux_unified_gate/ci_workflow_dispatch_execution.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_dispatch_execution.md
+
+# 将 dispatch 执行结果收敛为 run trace 契约（P2-27，统一 run_id/url/poll 命令与状态）
+python scripts/run_p2_linux_ci_workflow_dispatch_trace_gate.py --dispatch-execution-report .claude/reports/linux_unified_gate/ci_workflow_dispatch_execution.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_dispatch_trace_gate.py --dispatch-execution-report .claude/reports/linux_unified_gate/ci_workflow_dispatch_execution.json --poll-now --project-root . --output-json .claude/reports/linux_unified_gate/ci_workflow_dispatch_trace.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_dispatch_trace.md
+
+# 等待 dispatch run 收敛为最终完成判定（P2-28，统一 completed/in_progress/timeout/failure 语义）
+python scripts/run_p2_linux_ci_workflow_dispatch_completion_gate.py --dispatch-trace-report .claude/reports/linux_unified_gate/ci_workflow_dispatch_trace.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_dispatch_completion_gate.py --dispatch-trace-report .claude/reports/linux_unified_gate/ci_workflow_dispatch_trace.json --project-root . --poll-interval-seconds 20 --max-polls 15 --output-json .claude/reports/linux_unified_gate/ci_workflow_dispatch_completion.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_dispatch_completion.md
+
+# 发布 dispatch completion 的终局结论（P2-29，统一 promote/hold 发布语义）
+python scripts/run_p2_linux_ci_workflow_terminal_publish_gate.py --dispatch-completion-report .claude/reports/linux_unified_gate/ci_workflow_dispatch_completion.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_terminal_publish_gate.py --dispatch-completion-report .claude/reports/linux_unified_gate/ci_workflow_dispatch_completion.json --output-json .claude/reports/linux_unified_gate/ci_workflow_terminal_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_terminal_publish.md
+
+# 将 terminal publish 收敛为 release handoff 契约（P2-30，统一 release job 触发语义）
+python scripts/run_p2_linux_ci_workflow_release_handoff_gate.py --terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_terminal_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_handoff_gate.py --terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_terminal_publish.json --target-environment production --release-channel stable --output-json .claude/reports/linux_unified_gate/ci_workflow_release_handoff.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_handoff.md
+
+# 执行 release 最终触发门禁（P2-31，统一 release dispatch 执行语义）
+python scripts/run_p2_linux_ci_workflow_release_trigger_gate.py --release-handoff-report .claude/reports/linux_unified_gate/ci_workflow_release_handoff.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_trigger_gate.py --release-handoff-report .claude/reports/linux_unified_gate/ci_workflow_release_handoff.json --release-workflow-path .github/workflows/release.yml --release-workflow-ref main --output-json .claude/reports/linux_unified_gate/ci_workflow_release_trigger.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_trigger.md
+
+# 追踪 release trigger 执行后的 run 语义（P2-32，统一 release run trace/poll 状态）
+python scripts/run_p2_linux_ci_workflow_release_trace_gate.py --release-trigger-report .claude/reports/linux_unified_gate/ci_workflow_release_trigger.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_trace_gate.py --release-trigger-report .claude/reports/linux_unified_gate/ci_workflow_release_trigger.json --poll-now --project-root . --output-json .claude/reports/linux_unified_gate/ci_workflow_release_trace.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_trace.md
+
+# 等待 release run 收敛为最终完成判定（P2-33，统一 release 完成态语义）
+python scripts/run_p2_linux_ci_workflow_release_completion_gate.py --release-trace-report .claude/reports/linux_unified_gate/ci_workflow_release_trace.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_completion_gate.py --release-trace-report .claude/reports/linux_unified_gate/ci_workflow_release_trace.json --project-root . --poll-interval-seconds 20 --max-polls 15 --output-json .claude/reports/linux_unified_gate/ci_workflow_release_completion.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_completion.md
+
+# 发布 release completion 的终局结论（P2-34，统一 release finalize/hold 语义）
+python scripts/run_p2_linux_ci_workflow_release_terminal_publish_gate.py --release-completion-report .claude/reports/linux_unified_gate/ci_workflow_release_completion.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_terminal_publish_gate.py --release-completion-report .claude/reports/linux_unified_gate/ci_workflow_release_completion.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_terminal_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_terminal_publish.md
+
+# 将 release terminal publish 收敛为最终 finalization 决策（P2-35，统一 finalize/hold/abort 语义）
+python scripts/run_p2_linux_ci_workflow_release_finalization_gate.py --release-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_terminal_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_finalization_gate.py --release-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_terminal_publish.json --on-hold pass --output-json .claude/reports/linux_unified_gate/ci_workflow_release_finalization.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_finalization.md
+
+# 将 release finalization 收敛为最终 closure 发布契约（P2-36，统一 close/notify/rollback 语义）
+python scripts/run_p2_linux_ci_workflow_release_closure_gate.py --release-finalization-report .claude/reports/linux_unified_gate/ci_workflow_release_finalization.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_closure_gate.py --release-finalization-report .claude/reports/linux_unified_gate/ci_workflow_release_finalization.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_closure.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_closure.md
+
+# 将 release closure 收敛为最终证据归档契约（P2-37，统一 archive/publish/block 语义）
+python scripts/run_p2_linux_ci_workflow_release_archive_gate.py --release-closure-report .claude/reports/linux_unified_gate/ci_workflow_release_closure.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_archive_gate.py --release-closure-report .claude/reports/linux_unified_gate/ci_workflow_release_closure.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_archive.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_archive.md
+
+# 将 release archive 收敛为最终发布判词契约（P2-38，统一 ship/hold/block 语义）
+python scripts/run_p2_linux_ci_workflow_release_verdict_gate.py --release-archive-report .claude/reports/linux_unified_gate/ci_workflow_release_archive.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_verdict_gate.py --release-archive-report .claude/reports/linux_unified_gate/ci_workflow_release_archive.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_verdict.md
+
+# 将 release verdict 收敛为 incident dispatch 执行契约（P2-39，统一告警触发语义）
+python scripts/run_p2_linux_ci_workflow_release_incident_gate.py --release-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_verdict.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_incident_gate.py --release-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_verdict.json --incident-repo acme/demo --incident-label release-incident --output-json .claude/reports/linux_unified_gate/ci_workflow_release_incident.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_incident.md
+
+# 将 release incident 收敛为终局 terminal verdict 契约（P2-40，统一 ship/hold/escalate/block 语义）
+python scripts/run_p2_linux_ci_workflow_release_terminal_verdict_gate.py --release-incident-report .claude/reports/linux_unified_gate/ci_workflow_release_incident.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_terminal_verdict_gate.py --release-incident-report .claude/reports/linux_unified_gate/ci_workflow_release_incident.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_terminal_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_terminal_verdict.md
+
+# 将 release terminal verdict 收敛为最终 delivery 契约（P2-41，统一 deliver/hold/escalate/block 语义）
+python scripts/run_p2_linux_ci_workflow_release_delivery_gate.py --release-terminal-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_terminal_verdict.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_delivery_gate.py --release-terminal-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_terminal_verdict.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_delivery.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_delivery.md
+
+# P2-42: converge release delivery to terminal publish contract (announce_release/announce_hold/announce_blocker/abort_publish).
+python scripts/run_p2_linux_ci_workflow_release_delivery_terminal_publish_gate.py --release-delivery-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_delivery_terminal_publish_gate.py --release-delivery-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_delivery_terminal_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_delivery_terminal_publish.md
+
+# P2-43: converge release delivery terminal publish to final verdict contract (close_release/open_follow_up/escalate_blocker/abort_close).
+python scripts/run_p2_linux_ci_workflow_release_delivery_final_verdict_gate.py --release-delivery-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery_terminal_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_delivery_final_verdict_gate.py --release-delivery-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery_terminal_publish.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_delivery_final_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_delivery_final_verdict.md
+
+
+# P2-44: converge release delivery final verdict to follow-up dispatch contract (no_action/dispatch_follow_up/dispatch_escalation/abort_dispatch).
+python scripts/run_p2_linux_ci_workflow_release_follow_up_dispatch_gate.py --release-delivery-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery_final_verdict.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_follow_up_dispatch_gate.py --release-delivery-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery_final_verdict.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_dispatch.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_dispatch.md
+
+# P2-45: converge release follow-up dispatch to follow-up closure contract (no_action/queue_follow_up/queue_escalation/abort_queue).
+python scripts/run_p2_linux_ci_workflow_release_follow_up_closure_gate.py --release-follow-up-dispatch-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_dispatch.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_follow_up_closure_gate.py --release-follow-up-dispatch-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_dispatch.json --follow-up-repo acme/demo --follow-up-label release-follow-up --output-json .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_closure.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_closure.md
+
+# P2-46: converge release follow-up closure to terminal publish contract (announce_closed/announce_queued/announce_pending_queue/announce_queue_failure/abort_publish).
+python scripts/run_p2_linux_ci_workflow_release_follow_up_terminal_publish_gate.py --release-follow-up-closure-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_closure.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_follow_up_terminal_publish_gate.py --release-follow-up-closure-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_closure.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_terminal_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_terminal_publish.md
+
+# P2-47: converge release follow-up terminal publish to final verdict contract (close_follow_up/keep_follow_up_open/escalate_queue_failure/abort_close).
+python scripts/run_p2_linux_ci_workflow_release_follow_up_final_verdict_gate.py --release-follow-up-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_terminal_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_follow_up_final_verdict_gate.py --release-follow-up-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_terminal_publish.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_final_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_final_verdict.md
+
+# P2-48: converge delivery/follow-up final verdicts to one release final outcome contract (ship_and_close/ship_with_follow_up_open/escalate_blocker/abort_outcome).
+python scripts/run_p2_linux_ci_workflow_release_final_outcome_gate.py --release-delivery-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery_final_verdict.json --release-follow-up-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_final_verdict.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_outcome_gate.py --release-delivery-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_delivery_final_verdict.json --release-follow-up-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_follow_up_final_verdict.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_outcome.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_outcome.md
+
+# P2-49: converge release final outcome to terminal publish contract (announce_release_closure/announce_release_with_follow_up/announce_blocker/abort_publish).
+python scripts/run_p2_linux_ci_workflow_release_final_terminal_publish_gate.py --release-final-outcome-report .claude/reports/linux_unified_gate/ci_workflow_release_final_outcome.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_terminal_publish_gate.py --release-final-outcome-report .claude/reports/linux_unified_gate/ci_workflow_release_final_outcome.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_terminal_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_terminal_publish.md
+
+# P2-50: converge release final terminal publish to final handoff contract (handoff_release_closure/handoff_release_with_follow_up/handoff_blocker/abort_handoff).
+python scripts/run_p2_linux_ci_workflow_release_final_handoff_gate.py --release-final-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_final_terminal_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_handoff_gate.py --release-final-terminal-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_final_terminal_publish.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_handoff.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_handoff.md
+
+# P2-51: converge release final handoff to final closure contract (close_release/close_with_follow_up/close_blocker/abort_close).
+python scripts/run_p2_linux_ci_workflow_release_final_closure_gate.py --release-final-handoff-report .claude/reports/linux_unified_gate/ci_workflow_release_final_handoff.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_closure_gate.py --release-final-handoff-report .claude/reports/linux_unified_gate/ci_workflow_release_final_handoff.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_closure.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_closure.md
+
+# P2-52: publish release final closure contract (announce_release_closed/announce_release_closed_with_follow_up/announce_release_blocker/abort_publish).
+python scripts/run_p2_linux_ci_workflow_release_final_closure_publish_gate.py --release-final-closure-report .claude/reports/linux_unified_gate/ci_workflow_release_final_closure.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_closure_publish_gate.py --release-final-closure-report .claude/reports/linux_unified_gate/ci_workflow_release_final_closure.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_closure_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_closure_publish.md
+
+# P2-53: archive release final closure publish contract (archive_release_closed/archive_release_closed_with_follow_up/archive_release_blocker/abort_archive).
+python scripts/run_p2_linux_ci_workflow_release_final_archive_gate.py --release-final-closure-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_final_closure_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_archive_gate.py --release-final-closure-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_final_closure_publish.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_archive.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_archive.md
+
+# P2-54: converge release final archive to final verdict contract (ship_release/ship_release_with_follow_up/escalate_release_blocker/abort_verdict).
+python scripts/run_p2_linux_ci_workflow_release_final_verdict_gate.py --release-final-archive-report .claude/reports/linux_unified_gate/ci_workflow_release_final_archive.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_verdict_gate.py --release-final-archive-report .claude/reports/linux_unified_gate/ci_workflow_release_final_archive.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict.md
+
+# P2-55: publish release final verdict contract (announce_release_shipped/announce_release_shipped_with_follow_up/announce_release_blocker/abort_publish).
+python scripts/run_p2_linux_ci_workflow_release_final_verdict_publish_gate.py --release-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_verdict_publish_gate.py --release-final-verdict-report .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict_publish.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict_publish.md
+
+# P2-56: archive release final verdict publish contract (archive_release_shipped/archive_release_shipped_with_follow_up/archive_release_blocker/abort_archive).
+python scripts/run_p2_linux_ci_workflow_release_final_publish_archive_gate.py --release-final-verdict-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict_publish.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_release_final_publish_archive_gate.py --release-final-verdict-publish-report .claude/reports/linux_unified_gate/ci_workflow_release_final_verdict_publish.json --output-json .claude/reports/linux_unified_gate/ci_workflow_release_final_publish_archive.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_release_final_publish_archive.md
+
+# P2-57: close gate-script/runtime-test/manifest drift contract.
+python scripts/run_p2_linux_gate_manifest_drift_gate.py --dry-run --print-report
+python scripts/run_p2_linux_gate_manifest_drift_gate.py --output-json .claude/reports/linux_unified_gate/linux_gate_manifest_drift.json --output-markdown .claude/reports/linux_unified_gate/linux_gate_manifest_drift.md
+
+# P2-59: converge P2-56+P2-57 to one Linux terminal verdict contract.
+python scripts/run_p2_linux_ci_workflow_terminal_verdict_gate.py --release-final-publish-archive-report .claude/reports/linux_unified_gate/ci_workflow_release_final_publish_archive.json --gate-manifest-drift-report .claude/reports/linux_unified_gate/linux_gate_manifest_drift.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_terminal_verdict_gate.py --release-final-publish-archive-report .claude/reports/linux_unified_gate/ci_workflow_release_final_publish_archive.json --gate-manifest-drift-report .claude/reports/linux_unified_gate/linux_gate_manifest_drift.json --output-json .claude/reports/linux_unified_gate/ci_workflow_terminal_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_terminal_verdict.md
+
+# P2-60: dispatch Linux validation command from P2-59 terminal verdict contract.
+python scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py --terminal-verdict-report .claude/reports/linux_unified_gate/ci_workflow_terminal_verdict.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py --terminal-verdict-report .claude/reports/linux_unified_gate/ci_workflow_terminal_verdict.json --linux-validation-timeout-seconds 7200 --output-json .claude/reports/linux_unified_gate/ci_workflow_linux_validation_dispatch.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_linux_validation_dispatch.md
+
+# P2-61: converge Linux validation dispatch into one final Linux validation verdict contract.
+python scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py --linux-validation-dispatch-report .claude/reports/linux_unified_gate/ci_workflow_linux_validation_dispatch.json --dry-run --print-report
+python scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py --linux-validation-dispatch-report .claude/reports/linux_unified_gate/ci_workflow_linux_validation_dispatch.json --output-json .claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict.json --output-markdown .claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict.md
+
+# 一键串联 P2-17 -> P2-61 CI workflow 全链门禁（P2-26，Linux CI 总入口）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --dry-run
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --fail-fast --sync-write --command-guard-write --dispatch-trace-poll-now --completion-poll-interval-seconds 20 --completion-max-polls 15 --target-environment production --release-channel stable --release-workflow-path .github/workflows/release.yml --release-workflow-ref main --release-trace-poll-now --release-completion-poll-interval-seconds 20 --release-completion-max-polls 15 --on-release-hold pass --follow-up-repo acme/demo --follow-up-label release-follow-up
+# 仅执行后半链（从治理发布开始）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance
+# 仅执行 P2-29 终局发布（复用已产出的 completion 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion
+# 仅执行 P2-30 release handoff（复用已产出的 terminal publish 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --target-environment staging --release-channel canary --skip-release-trigger --skip-release-trace --skip-release-completion
+# 仅执行 P2-31 release trigger（复用已产出的 release handoff 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --release-workflow-path .github/workflows/release.yml --release-workflow-ref main --skip-release-trace --skip-release-completion
+# 仅执行 P2-32 release trace（复用已产出的 release trigger 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --release-trace-poll-now --skip-release-completion
+# 仅执行 P2-33 release completion（复用已产出的 release trace 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --release-completion-poll-interval-seconds 20 --release-completion-max-polls 15 --skip-release-terminal-publish
+# 仅执行 P2-34 release terminal publish（复用已产出的 release completion 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-finalization --skip-release-closure --skip-release-archive
+# 仅执行 P2-35 release finalization（复用已产出的 release terminal publish 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --on-release-hold fail --skip-release-closure --skip-release-archive
+# 仅执行 P2-36 release closure（复用已产出的 release finalization 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-archive
+# 仅执行 P2-37 release archive（复用已产出的 release closure 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-verdict --skip-release-incident
+# 仅执行 P2-38 release verdict（复用已产出的 release archive 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-incident
+# 仅执行 P2-39 release incident（复用已产出的 release verdict 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-terminal-verdict --incident-repo acme/demo --incident-label release-incident
+# 仅执行 P2-40 release terminal verdict（复用已产出的 release incident 报告）
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch
+# P2-42 only: run release delivery terminal publish (reuse release delivery report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch
+# P2-43 only: run release delivery final verdict (reuse release delivery terminal publish report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-follow-up-dispatch
+# P2-44 only: run release follow-up dispatch (reuse release delivery final verdict report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict
+# P2-45 only: run release follow-up closure (reuse release follow-up dispatch report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --follow-up-repo acme/demo --follow-up-label release-follow-up
+
+# P2-46 only: run release follow-up terminal publish (reuse release follow-up closure report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-final-verdict --follow-up-repo acme/demo --follow-up-label release-follow-up
+
+# P2-47 only: run release follow-up final verdict (reuse release follow-up terminal publish report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --follow-up-repo acme/demo --follow-up-label release-follow-up
+# P2-48 only: run release final outcome (reuse P2-43 + P2-47 final verdict reports).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict
+# P2-49 only: run release final terminal publish (reuse P2-48 final outcome report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish
+# P2-50 only: run release final handoff (reuse P2-49 final terminal publish report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-closure --skip-release-final-closure-publish
+# P2-51 only: run release final closure (reuse P2-50 final handoff report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure-publish
+# P2-52 only: run release final closure publish (reuse P2-51 final closure report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-archive
+
+# P2-53 only: run release final archive (reuse P2-52 final closure publish report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish
+# P2-54 only: run release final verdict (reuse P2-53 final archive report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive
+# P2-55 only: run release final verdict publish (reuse P2-54 final verdict report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive --skip-release-final-verdict
+# P2-56 only: run release final publish archive (reuse P2-55 final verdict publish report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive --skip-release-final-verdict --skip-release-final-verdict-publish
+# P2-57 only: run gate manifest drift closure (independent closure check over scripts/tests/manifest).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive --skip-release-final-verdict --skip-release-final-verdict-publish --skip-release-final-publish-archive
+# P2-59 only: run terminal verdict closure (reuse P2-56 + P2-57 reports).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive --skip-release-final-verdict --skip-release-final-verdict-publish --skip-release-final-publish-archive --skip-gate-manifest-drift
+# P2-60 only: run Linux validation dispatch (reuse P2-59 terminal verdict report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive --skip-release-final-verdict --skip-release-final-verdict-publish --skip-release-final-publish-archive --skip-gate-manifest-drift --skip-terminal-verdict --linux-validation-timeout-seconds 7200
+# P2-61 only: run Linux validation verdict (reuse P2-60 Linux validation dispatch report).
+python scripts/run_p2_linux_ci_workflow_pipeline_gate.py --skip-plan --skip-yaml --skip-sync --skip-command-guard --skip-governance --skip-governance-publish --skip-decision --skip-dispatch --skip-dispatch-execution --skip-dispatch-trace --skip-dispatch-completion --skip-dispatch-terminal-publish --skip-dispatch-release-handoff --skip-release-trigger --skip-release-trace --skip-release-completion --skip-release-terminal-publish --skip-release-finalization --skip-release-closure --skip-release-archive --skip-release-verdict --skip-release-incident --skip-release-terminal-verdict --skip-release-delivery --skip-release-delivery-terminal-publish --skip-release-delivery-final-verdict --skip-release-follow-up-dispatch --skip-release-follow-up-closure --skip-release-follow-up-terminal-publish --skip-release-follow-up-final-verdict --skip-release-final-outcome --skip-release-final-terminal-publish --skip-release-final-handoff --skip-release-final-closure --skip-release-final-closure-publish --skip-release-final-archive --skip-release-final-verdict --skip-release-final-verdict-publish --skip-release-final-publish-archive --skip-gate-manifest-drift --skip-terminal-verdict --skip-linux-validation-dispatch
 # 语法检查
 python scripts/check_syntax.py --root claude_code
 
@@ -298,3 +609,7 @@ python -m pytest -q -c pytest.ini
 - 想追溯历史问题和修复方案，再看历史文档
 
 这就是当前仓库文档的推荐阅读顺序和维护边界。
+
+
+
+

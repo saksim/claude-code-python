@@ -85,6 +85,16 @@ class HookResult:
     error: Optional[str] = None
     duration_ms: float = 0.0
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize hook execution result for audit/event payloads."""
+        return {
+            "hook_name": self.hook_name,
+            "success": self.success,
+            "output": self.output,
+            "error": self.error,
+            "duration_ms": self.duration_ms,
+        }
+
 
 class HooksManager:
     """Manages execution hooks.

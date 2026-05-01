@@ -344,3 +344,102 @@ def test_config_accepts_local_openai_compatible_providers():
     assert main_mod.Config(api_provider="ollama").api_provider == "ollama"
     assert main_mod.Config(api_provider="vllm").api_provider == "vllm"
     assert main_mod.Config(api_provider="deepseek").api_provider == "deepseek"
+
+
+def test_main_single_query_uses_daemon_thin_client(monkeypatch):
+    class _FakeClient:
+        def __init__(self, base_url: str, *, timeout_seconds: float = 10.0) -> None:
+            self.base_url = base_url
+            self.timeout_seconds = timeout_seconds
+
+        def query(self, query: str):
+            return {"output": f"daemon:{query}"}
+
+    import claude_code.server.control_plane as control_plane_mod
+
+    monkeypatch.setattr(control_plane_mod, "ControlPlaneClient", _FakeClient)
+    monkeypatch.setattr(main_mod.sys, "argv", ["claude-code", "--daemon-client", "hello", "thin"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_mod.main()
+
+    assert exc_info.value.code == 0
+
+
+def test_main_single_query_falls_back_to_local_when_daemon_client_fails(monkeypatch):
+    class _BrokenClient:
+        def __init__(self, base_url: str, *, timeout_seconds: float = 10.0) -> None:
+            pass
+
+        def query(self, query: str):
+            raise RuntimeError("daemon down")
+
+    import claude_code.server.control_plane as control_plane_mod
+
+    fallback = {"called": False}
+
+    async def _fake_run_single_query(query: str, model=None, verbose=False, system=None):
+        fallback["called"] = True
+        return 0
+
+    monkeypatch.setattr(control_plane_mod, "ControlPlaneClient", _BrokenClient)
+    monkeypatch.setattr(main_mod, "run_single_query", _fake_run_single_query)
+    monkeypatch.setattr(main_mod.sys, "argv", ["claude-code", "--daemon-client", "fallback-case"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_mod.main()
+
+    assert exc_info.value.code == 0
+    assert fallback["called"] is True
+
+
+def test_main_single_query_daemon_required_fails_without_local_fallback(monkeypatch):
+    class _BrokenClient:
+        def __init__(self, base_url: str, *, timeout_seconds: float = 10.0) -> None:
+            pass
+
+        def query(self, query: str):
+            raise RuntimeError("daemon down")
+
+    import claude_code.server.control_plane as control_plane_mod
+
+    fallback = {"called": False}
+
+    async def _fake_run_single_query(query: str, model=None, verbose=False, system=None):
+        fallback["called"] = True
+        return 0
+
+    monkeypatch.setattr(control_plane_mod, "ControlPlaneClient", _BrokenClient)
+    monkeypatch.setattr(main_mod, "run_single_query", _fake_run_single_query)
+    monkeypatch.setattr(
+        main_mod.sys,
+        "argv",
+        ["claude-code", "--daemon-client", "--daemon-required", "hard-fail"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_mod.main()
+
+    assert exc_info.value.code == 1
+    assert fallback["called"] is False
+
+
+def test_main_pipe_mode_uses_daemon_thin_client(monkeypatch):
+    class _FakeClient:
+        def __init__(self, base_url: str, *, timeout_seconds: float = 10.0) -> None:
+            self.base_url = base_url
+            self.timeout_seconds = timeout_seconds
+
+        def query(self, query: str):
+            return {"output": "daemon-pipe-output"}
+
+    import claude_code.server.control_plane as control_plane_mod
+
+    monkeypatch.setattr(control_plane_mod, "ControlPlaneClient", _FakeClient)
+    monkeypatch.setattr(main_mod.sys, "argv", ["claude-code", "--pipe", "--daemon-client"])
+    monkeypatch.setattr(main_mod.sys, "stdin", type("_Stdin", (), {"read": staticmethod(lambda: "pipe input")})())
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_mod.main()
+
+    assert exc_info.value.code == 0

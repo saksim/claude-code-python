@@ -156,6 +156,7 @@ class QueryConfig:
     always_deny: list[str] = field(default_factory=list)
     session_id: Optional[str] = None
     working_directory: Optional[str] = None
+    memory_scope: str = "project"
 
 
 @dataclass 
@@ -278,8 +279,10 @@ class QueryEngine:
             payload={
                 "input": user_input,
                 "has_attachments": bool(attachments),
+                "memory_scope": self.config.memory_scope,
             },
         )
+        self._record_active_memory_hit(query_text=user_input)
         self._record_event(
             event_type="message.user",
             payload={
@@ -671,6 +674,43 @@ class QueryEngine:
             metadata=message_metadata,
         )
 
+    def _record_active_memory_hit(self, *, query_text: str) -> None:
+        """Record active memory match information for runtime observability."""
+        memory = getattr(self, "memory", None)
+        if memory is None:
+            return
+        snapshot_scoped = getattr(memory, "snapshot_scoped", None)
+        if not callable(snapshot_scoped):
+            return
+        scope = self.config.memory_scope or "project"
+        try:
+            snapshot = snapshot_scoped(
+                scope,
+                working_directory=self.config.working_directory,
+                limit=20,
+            )
+        except Exception:
+            return
+        if not snapshot:
+            return
+        query_terms = {part.lower() for part in query_text.split() if part.strip()}
+        matched_keys = sorted(
+            key
+            for key, value in snapshot.items()
+            if key.lower() in query_terms
+            or any(term in str(value).lower() for term in query_terms)
+        )
+        if not matched_keys:
+            return
+        self._record_event(
+            event_type="memory.hit",
+            payload={
+                "scope": scope,
+                "matched_keys": matched_keys,
+                "matched_count": len(matched_keys),
+            },
+        )
+
     def _archive_session_to_history(self, session: Any) -> int:
         """Archive persisted session into history storage."""
         try:
@@ -726,6 +766,55 @@ class QueryEngine:
         except Exception:
             return []
 
+    def _serialize_hook_results(self, results: list[Any]) -> list[dict[str, Any]]:
+        """Normalize hook trigger results for event journal payloads."""
+        serialized: list[dict[str, Any]] = []
+        for item in results:
+            to_dict = getattr(item, "to_dict", None)
+            if callable(to_dict):
+                try:
+                    data = to_dict()
+                    if isinstance(data, dict):
+                        serialized.append(data)
+                        continue
+                except Exception:
+                    pass
+
+            hook_name = getattr(item, "hook_name", None)
+            success = getattr(item, "success", None)
+            output = getattr(item, "output", None)
+            error = getattr(item, "error", None)
+            duration_ms = getattr(item, "duration_ms", None)
+            serialized.append(
+                {
+                    "hook_name": hook_name if hook_name is not None else "<unknown>",
+                    "success": bool(success) if success is not None else False,
+                    "output": output if output is not None else "",
+                    "error": error,
+                    "duration_ms": float(duration_ms) if duration_ms is not None else 0.0,
+                }
+            )
+        return serialized
+
+    def _record_hook_execution_event(
+        self,
+        *,
+        event: HookEvent,
+        hook_context: dict[str, Any],
+        results: list[Any],
+    ) -> None:
+        """Record hook execution outcomes into event journal."""
+        self._record_event(
+            event_type="hook.execution",
+            payload={
+                "hook_event": event.value,
+                "tool_name": hook_context.get("tool_name"),
+                "tool_use_id": hook_context.get("tool_use_id"),
+                "phase": hook_context.get("phase"),
+                "results": self._serialize_hook_results(results),
+            },
+        )
+
     def _build_tool_hook_context(
         self,
         tool_use: ToolUse,
@@ -765,31 +854,68 @@ class QueryEngine:
         error_message: Optional[str] = None,
     ) -> None:
         """Emit after_tool and on_error hooks for tool completion."""
-        await self._trigger_hook_event(
+        after_context = self._build_tool_hook_context(
+            tool_use,
+            phase=HookEvent.AFTER_TOOL.value,
+            duration_ms=duration_ms,
+            result=result,
+        )
+        after_results = await self._trigger_hook_event(
             HookEvent.AFTER_TOOL,
-            self._build_tool_hook_context(
-                tool_use,
-                phase=HookEvent.AFTER_TOOL.value,
-                duration_ms=duration_ms,
-                result=result,
-            ),
+            after_context,
+        )
+        self._record_hook_execution_event(
+            event=HookEvent.AFTER_TOOL,
+            hook_context=after_context,
+            results=after_results,
         )
 
         if result.is_error:
-            await self._trigger_hook_event(
+            error_context = self._build_tool_hook_context(
+                tool_use,
+                phase=HookEvent.ON_ERROR.value,
+                duration_ms=duration_ms,
+                result=result,
+                error=error_message or str(result.content),
+            )
+            error_results = await self._trigger_hook_event(
                 HookEvent.ON_ERROR,
-                self._build_tool_hook_context(
-                    tool_use,
-                    phase=HookEvent.ON_ERROR.value,
-                    duration_ms=duration_ms,
-                    result=result,
-                    error=error_message or str(result.content),
-                ),
+                error_context,
+            )
+            self._record_hook_execution_event(
+                event=HookEvent.ON_ERROR,
+                hook_context=error_context,
+                results=error_results,
             )
     
     async def _execute_tool(self, tool_use: ToolUse) -> ToolCallResult:
         """Execute a tool call."""
         start_time = time.time()
+        permission_checker = create_permission_checker(
+            mode=self.config.permission_mode,
+            always_allow=list(self.config.always_allow),
+            always_deny=list(self.config.always_deny),
+        )
+        permission_evaluation = permission_checker.evaluate(tool_use.name)
+        self._record_event(
+            event_type="permission.requested",
+            payload={
+                "tool_use_id": tool_use.id,
+                "tool_name": tool_use.name,
+                "tool_input": tool_use.input,
+                "permission_mode": self.config.permission_mode,
+            },
+        )
+        self._record_event(
+            event_type="permission.decided",
+            payload={
+                "tool_use_id": tool_use.id,
+                "tool_name": tool_use.name,
+                "allowed": permission_evaluation.allowed,
+                "decision_reason": permission_evaluation.reason,
+                "permission_mode": self.config.permission_mode,
+            },
+        )
         self._record_event(
             event_type="tool.started",
             payload={
@@ -798,12 +924,18 @@ class QueryEngine:
                 "tool_input": tool_use.input,
             },
         )
-        await self._trigger_hook_event(
+        before_context = self._build_tool_hook_context(
+            tool_use,
+            phase=HookEvent.BEFORE_TOOL.value,
+        )
+        before_results = await self._trigger_hook_event(
             HookEvent.BEFORE_TOOL,
-            self._build_tool_hook_context(
-                tool_use,
-                phase=HookEvent.BEFORE_TOOL.value,
-            ),
+            before_context,
+        )
+        self._record_hook_execution_event(
+            event=HookEvent.BEFORE_TOOL,
+            hook_context=before_context,
+            results=before_results,
         )
 
         async def _finalize(result: ToolResult, error_message: Optional[str] = None) -> ToolCallResult:
@@ -856,14 +988,18 @@ class QueryEngine:
             always_deny=list(self.config.always_deny),
             model=self.config.model,
             session_id=self.config.session_id or self.conversation_id,
+            memory_scope=self.config.memory_scope,
+            conversation_id=self.conversation_id,
+            api_provider=(
+                getattr(getattr(self.api_client, "config", None), "provider", None).value
+                if hasattr(getattr(getattr(self.api_client, "config", None), "provider", None), "value")
+                else str(getattr(getattr(self.api_client, "config", None), "provider", ""))
+            ),
+            task_manager=getattr(self, "task_manager", None),
+            tool_registry=self.tool_registry,
         )
-        
-        permission_checker = create_permission_checker(
-            mode=self.config.permission_mode,
-            always_allow=list(self.config.always_allow),
-            always_deny=list(self.config.always_deny),
-        )
-        if not permission_checker.can_execute(tool_use.name):
+
+        if not permission_evaluation.allowed:
             error_message = (
                 f"Permission denied for tool: {tool_use.name} "
                 f"(mode={context.permission_mode})"

@@ -14,6 +14,7 @@ import json
 import os
 import shlex
 import socket
+import subprocess
 import threading
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,6 +28,15 @@ from urllib import request as urllib_request
 from pydantic import BaseModel, Field, ValidationError
 
 from claude_code.permissions import create_permission_checker
+from claude_code.services.github_ci_workflow import (
+    GitHubCIWorkflowError,
+    GitHubCIWorkflowService,
+)
+from claude_code.services.org_policy_audit import (
+    OrgPolicyAuditError,
+    OrgPolicyAuditService,
+)
+from claude_code.services.review_service import ReviewService, ReviewServiceError
 from claude_code.tasks.types import BashTask, Task, TaskResult, TaskStatus, TaskType
 from claude_code.tools.base import ToolContext
 
@@ -146,6 +156,69 @@ class JournalReplayRequest(BaseModel):
     limit: int = Field(default=200, ge=1, le=5000)
     since_sequence: int | None = Field(default=None, ge=1)
     until_sequence: int | None = Field(default=None, ge=1)
+
+
+class IDEWorkspaceRequest(BaseModel):
+    """GET /api/v1/ide/workspace query schema."""
+
+    include_diff: bool = True
+    diff_max_lines: int = Field(default=400, ge=1, le=4000)
+    findings_limit: int = Field(default=200, ge=1, le=2000)
+    session_limit: int = Field(default=20, ge=1, le=200)
+    task_limit: int = Field(default=50, ge=1, le=500)
+
+
+class GitHubCIWorkflowRequest(BaseModel):
+    """POST /api/v1/workflows/github-ci payload."""
+
+    issue_reference: str | None = None
+    plan_summary: str | None = None
+    branch_name: str | None = None
+    base_branch: str = "main"
+    commit_message: str | None = None
+    pr_title: str | None = None
+    pr_body: str | None = None
+    ci_commands: list[str] = Field(default_factory=list)
+    headless_ci: bool = True
+    allow_dirty_repo: bool = False
+    push_remote: bool = True
+    create_pull_request: bool = True
+
+
+class OrgPolicyEvaluateRequest(BaseModel):
+    """POST /api/v1/org/policy/evaluate payload."""
+
+    tool_name: str = Field(min_length=1)
+    operation: str = "execute"
+    payload: Any = None
+    actor: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    policies: list[dict[str, Any]] = Field(default_factory=list)
+    create_approval: bool = True
+
+
+class OrgPolicyApprovalDecisionRequest(BaseModel):
+    """POST /api/v1/org/policy/approvals/decide payload."""
+
+    approval_id: str = Field(min_length=1)
+    decision: str = Field(min_length=1)
+    decided_by: str | None = None
+    reason: str | None = None
+
+
+class OrgPolicyAuditListRequest(BaseModel):
+    """GET /api/v1/org/policy/audit query schema."""
+
+    event_type: str | None = None
+    tool_name: str | None = None
+    limit: int = Field(default=200, ge=1, le=2000)
+
+
+class OrgPolicyApprovalsListRequest(BaseModel):
+    """GET /api/v1/org/policy/approvals query schema."""
+
+    status: str | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
 
 
 def _iso_or_none(value: Optional[datetime]) -> Optional[str]:
@@ -490,6 +563,249 @@ class ControlPlaneService:
             "diagnostics": journal.get_diagnostics(),
         }
 
+    async def ide_workspace(self, request: IDEWorkspaceRequest) -> dict[str, Any]:
+        """Collect IDE-facing workspace snapshot for VS Code client adapters."""
+        working_directory = str(self.runtime.working_directory)
+        sessions_payload = await self.list_sessions()
+        tasks_payload = await self.list_tasks()
+        files_payload = self._collect_changed_files(working_directory)
+        findings_payload = self._collect_findings(
+            working_directory,
+            limit=request.findings_limit,
+        )
+
+        sessions = sessions_payload.get("sessions", [])
+        tasks = tasks_payload.get("tasks", [])
+        diff_text = self._collect_git_diff(
+            working_directory,
+            include_diff=request.include_diff,
+            max_lines=request.diff_max_lines,
+        )
+
+        return {
+            "workspace": {
+                "working_directory": working_directory,
+                "diff": diff_text,
+                "changed_files": files_payload,
+                "sessions": sessions[: request.session_limit],
+                "tasks": tasks[: request.task_limit],
+                "findings": findings_payload[: request.findings_limit],
+            }
+        }
+
+    async def run_github_ci_workflow(self, request: GitHubCIWorkflowRequest) -> dict[str, Any]:
+        """Run P2-04 issue->plan->code->test->review->PR workflow."""
+        workflow_service = GitHubCIWorkflowService()
+        try:
+            workflow = workflow_service.run_workflow(
+                working_directory=str(self.runtime.working_directory),
+                issue_reference=request.issue_reference,
+                plan_summary=request.plan_summary,
+                branch_name=request.branch_name,
+                base_branch=request.base_branch,
+                commit_message=request.commit_message,
+                pr_title=request.pr_title,
+                pr_body=request.pr_body,
+                ci_commands=request.ci_commands,
+                headless_ci=request.headless_ci,
+                allow_dirty_repo=request.allow_dirty_repo,
+                push_remote=request.push_remote,
+                create_pull_request=request.create_pull_request,
+            )
+        except GitHubCIWorkflowError as exc:
+            raise ControlPlaneError(
+                exc.message,
+                code=exc.code,
+                status_code=exc.status_code,
+                details=exc.details,
+            ) from exc
+        return {"workflow": workflow}
+
+    async def evaluate_org_policy(self, request: OrgPolicyEvaluateRequest) -> dict[str, Any]:
+        """Run P2-05 org policy matching with approval/audit flow."""
+        org_service = self._get_org_policy_service()
+        if request.policies:
+            org_service.configure_policies(
+                policies=request.policies,
+                replace=True,
+            )
+        try:
+            decision = org_service.evaluate(
+                tool_name=request.tool_name,
+                operation=request.operation,
+                payload=request.payload,
+                actor=request.actor,
+                context=request.context,
+                create_approval=request.create_approval,
+            )
+        except OrgPolicyAuditError as exc:
+            raise ControlPlaneError(
+                exc.message,
+                code=exc.code,
+                status_code=exc.status_code,
+                details=exc.details,
+            ) from exc
+        return {"policy_decision": decision}
+
+    async def decide_org_approval(self, request: OrgPolicyApprovalDecisionRequest) -> dict[str, Any]:
+        """Apply approval queue transition for org policy flow."""
+        org_service = self._get_org_policy_service()
+        try:
+            approval = org_service.decide_approval(
+                approval_id=request.approval_id,
+                decision=request.decision,
+                decided_by=request.decided_by,
+                reason=request.reason,
+            )
+        except OrgPolicyAuditError as exc:
+            raise ControlPlaneError(
+                exc.message,
+                code=exc.code,
+                status_code=exc.status_code,
+                details=exc.details,
+            ) from exc
+        return {"approval": approval}
+
+    async def list_org_approvals(self, request: OrgPolicyApprovalsListRequest) -> dict[str, Any]:
+        """List org policy approval queue."""
+        approvals = self._get_org_policy_service().list_approvals(
+            status=request.status,
+            limit=request.limit,
+        )
+        return {"approvals": approvals}
+
+    async def list_org_audit_events(self, request: OrgPolicyAuditListRequest) -> dict[str, Any]:
+        """List org policy audit events."""
+        events = self._get_org_policy_service().list_audit_events(
+            event_type=request.event_type,
+            tool_name=request.tool_name,
+            limit=request.limit,
+        )
+        return {"events": events}
+
+    async def get_org_audit_report(self, *, limit: int = 200) -> dict[str, Any]:
+        """Get summarized org policy audit report."""
+        report = self._get_org_policy_service().build_report(limit=limit)
+        return {"report": report}
+
+    def _get_org_policy_service(self) -> OrgPolicyAuditService:
+        """Resolve runtime org policy service, create one lazily if needed."""
+        existing = getattr(self.runtime, "org_policy_audit_service", None)
+        if isinstance(existing, OrgPolicyAuditService):
+            return existing
+
+        journal = getattr(self.runtime, "event_journal", None)
+        append_event = getattr(journal, "append_event", None)
+        service = OrgPolicyAuditService(
+            append_event=append_event if callable(append_event) else None,
+        )
+        setattr(self.runtime, "org_policy_audit_service", service)
+        return service
+
+    @staticmethod
+    def _collect_changed_files(working_directory: str) -> list[dict[str, str]]:
+        """Collect changed files for IDE list display."""
+        result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "-uall"],
+            cwd=working_directory,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            error = result.stderr.strip() or "unknown git error"
+            raise ControlPlaneError(
+                f"Unable to collect changed files: {error}",
+                code="git_error",
+                status_code=503,
+            )
+
+        files: list[dict[str, str]] = []
+        seen_paths: set[str] = set()
+        for raw_line in result.stdout.splitlines():
+            line = raw_line.rstrip()
+            if len(line) < 4:
+                continue
+            status = line[:2]
+            path_token = line[3:].strip()
+            if " -> " in path_token:
+                path_token = path_token.split(" -> ", 1)[1].strip()
+            if (
+                not path_token
+                or path_token in seen_paths
+            ):
+                continue
+            seen_paths.add(path_token)
+            files.append({"path": path_token, "status": status})
+        return files
+
+    @staticmethod
+    def _collect_git_diff(
+        working_directory: str,
+        *,
+        include_diff: bool,
+        max_lines: int,
+    ) -> dict[str, Any]:
+        """Collect bounded git diff text for IDE panel rendering."""
+        if not include_diff:
+            return {
+                "content": "",
+                "truncated": False,
+                "line_count": 0,
+                "max_lines": max_lines,
+            }
+
+        result = subprocess.run(
+            ["git", "diff"],
+            cwd=working_directory,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            error = result.stderr.strip() or "unknown git error"
+            raise ControlPlaneError(
+                f"Unable to collect git diff: {error}",
+                code="git_error",
+                status_code=503,
+            )
+
+        content = result.stdout
+        lines = content.splitlines()
+        truncated = len(lines) > max_lines
+        if truncated:
+            content = "\n".join(lines[:max_lines])
+            if content:
+                content += "\n"
+            content += f"... [truncated: showing first {max_lines} lines]"
+        return {
+            "content": content,
+            "truncated": truncated,
+            "line_count": len(lines),
+            "max_lines": max_lines,
+        }
+
+    @staticmethod
+    def _collect_findings(working_directory: str, *, limit: int) -> list[dict[str, Any]]:
+        """Collect structured findings from review service for IDE diagnostics."""
+        review_service = ReviewService()
+        try:
+            result = review_service.review_git_changes(working_directory)
+        except ReviewServiceError as exc:
+            raise ControlPlaneError(
+                f"Unable to collect review findings: {exc}",
+                code="review_unavailable",
+                status_code=503,
+            ) from exc
+        return [
+            {
+                "file_path": finding.file_path,
+                "line": finding.line,
+                "severity": finding.severity,
+                "issue": finding.issue,
+                "recommendation": finding.recommendation,
+            }
+            for finding in result.findings[:limit]
+        ]
+
     async def _execute_bash_task(self, task: Task) -> TaskResult:
         if not isinstance(task, BashTask):
             raise TypeError("executor expects BashTask")
@@ -821,6 +1137,88 @@ class ControlPlaneDaemon:
             )
             return self._await_service_call(self._service.replay_events(request))
 
+        if method == "GET" and path == "/api/v1/ide/workspace":
+            request = self._validate_payload(
+                IDEWorkspaceRequest,
+                {
+                    "include_diff": self._parse_optional_bool(
+                        self._first_query_value(query_params, "include_diff"),
+                        default=True,
+                        field_name="include_diff",
+                    ),
+                    "diff_max_lines": self._parse_optional_int(
+                        self._first_query_value(query_params, "diff_max_lines"),
+                        default=400,
+                        field_name="diff_max_lines",
+                    ),
+                    "findings_limit": self._parse_optional_int(
+                        self._first_query_value(query_params, "findings_limit"),
+                        default=200,
+                        field_name="findings_limit",
+                    ),
+                    "session_limit": self._parse_optional_int(
+                        self._first_query_value(query_params, "session_limit"),
+                        default=20,
+                        field_name="session_limit",
+                    ),
+                    "task_limit": self._parse_optional_int(
+                        self._first_query_value(query_params, "task_limit"),
+                        default=50,
+                        field_name="task_limit",
+                    ),
+                },
+            )
+            return self._await_service_call(self._service.ide_workspace(request))
+
+        if method == "POST" and path == "/api/v1/workflows/github-ci":
+            request = self._validate_payload(GitHubCIWorkflowRequest, payload)
+            return self._await_service_call(self._service.run_github_ci_workflow(request))
+
+        if method == "POST" and path == "/api/v1/org/policy/evaluate":
+            request = self._validate_payload(OrgPolicyEvaluateRequest, payload)
+            return self._await_service_call(self._service.evaluate_org_policy(request))
+
+        if method == "POST" and path == "/api/v1/org/policy/approvals/decide":
+            request = self._validate_payload(OrgPolicyApprovalDecisionRequest, payload)
+            return self._await_service_call(self._service.decide_org_approval(request))
+
+        if method == "GET" and path == "/api/v1/org/policy/approvals":
+            request = self._validate_payload(
+                OrgPolicyApprovalsListRequest,
+                {
+                    "status": self._first_query_value(query_params, "status"),
+                    "limit": self._parse_optional_int(
+                        self._first_query_value(query_params, "limit"),
+                        default=100,
+                        field_name="limit",
+                    ),
+                },
+            )
+            return self._await_service_call(self._service.list_org_approvals(request))
+
+        if method == "GET" and path == "/api/v1/org/policy/audit":
+            request = self._validate_payload(
+                OrgPolicyAuditListRequest,
+                {
+                    "event_type": self._first_query_value(query_params, "event_type"),
+                    "tool_name": self._first_query_value(query_params, "tool_name"),
+                    "limit": self._parse_optional_int(
+                        self._first_query_value(query_params, "limit"),
+                        default=200,
+                        field_name="limit",
+                    ),
+                },
+            )
+            return self._await_service_call(self._service.list_org_audit_events(request))
+
+        if method == "GET" and path == "/api/v1/org/policy/report":
+            limit = self._parse_optional_int(
+                self._first_query_value(query_params, "limit"),
+                default=200,
+                field_name="limit",
+            )
+            return self._await_service_call(self._service.get_org_audit_report(limit=limit or 200))
+
         raise ControlPlaneError(
             f"Route not found: {method} {path}",
             code="route_not_found",
@@ -892,6 +1290,26 @@ class ControlPlaneDaemon:
                 code="validation_error",
                 status_code=400,
             ) from exc
+
+    @staticmethod
+    def _parse_optional_bool(
+        value: Optional[str],
+        *,
+        default: bool,
+        field_name: str,
+    ) -> bool:
+        if value is None or value == "":
+            return default
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        raise ControlPlaneError(
+            f"Invalid {field_name} value: {value}",
+            code="validation_error",
+            status_code=400,
+        )
 
     @staticmethod
     def _validate_payload(model: type[BaseModel], payload: dict[str, Any]) -> Any:
@@ -995,6 +1413,135 @@ class ControlPlaneClient:
             params["until_sequence"] = str(until_sequence)
         query = urllib_parse.urlencode(params)
         return self._request("GET", f"/api/v1/events/replay?{query}")
+
+    def get_ide_workspace(
+        self,
+        *,
+        include_diff: bool = True,
+        diff_max_lines: int = 400,
+        findings_limit: int = 200,
+        session_limit: int = 20,
+        task_limit: int = 50,
+    ) -> dict[str, Any]:
+        params = {
+            "include_diff": "true" if include_diff else "false",
+            "diff_max_lines": str(diff_max_lines),
+            "findings_limit": str(findings_limit),
+            "session_limit": str(session_limit),
+            "task_limit": str(task_limit),
+        }
+        query = urllib_parse.urlencode(params)
+        return self._request("GET", f"/api/v1/ide/workspace?{query}")
+
+    def run_github_ci_workflow(
+        self,
+        *,
+        issue_reference: str | None = None,
+        plan_summary: str | None = None,
+        branch_name: str | None = None,
+        base_branch: str = "main",
+        commit_message: str | None = None,
+        pr_title: str | None = None,
+        pr_body: str | None = None,
+        ci_commands: list[str] | None = None,
+        headless_ci: bool = True,
+        allow_dirty_repo: bool = False,
+        push_remote: bool = True,
+        create_pull_request: bool = True,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "base_branch": base_branch,
+            "ci_commands": list(ci_commands or []),
+            "headless_ci": headless_ci,
+            "allow_dirty_repo": allow_dirty_repo,
+            "push_remote": push_remote,
+            "create_pull_request": create_pull_request,
+        }
+        if issue_reference is not None:
+            payload["issue_reference"] = issue_reference
+        if plan_summary is not None:
+            payload["plan_summary"] = plan_summary
+        if branch_name is not None:
+            payload["branch_name"] = branch_name
+        if commit_message is not None:
+            payload["commit_message"] = commit_message
+        if pr_title is not None:
+            payload["pr_title"] = pr_title
+        if pr_body is not None:
+            payload["pr_body"] = pr_body
+        return self._request("POST", "/api/v1/workflows/github-ci", payload=payload)
+
+    def evaluate_org_policy(
+        self,
+        *,
+        tool_name: str,
+        operation: str = "execute",
+        payload: Any = None,
+        actor: str | None = None,
+        context: Optional[dict[str, Any]] = None,
+        policies: Optional[list[dict[str, Any]]] = None,
+        create_approval: bool = True,
+    ) -> dict[str, Any]:
+        request_payload: dict[str, Any] = {
+            "tool_name": tool_name,
+            "operation": operation,
+            "payload": payload,
+            "context": dict(context or {}),
+            "policies": list(policies or []),
+            "create_approval": create_approval,
+        }
+        if actor is not None:
+            request_payload["actor"] = actor
+        return self._request("POST", "/api/v1/org/policy/evaluate", payload=request_payload)
+
+    def decide_org_approval(
+        self,
+        *,
+        approval_id: str,
+        decision: str,
+        decided_by: str | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "approval_id": approval_id,
+            "decision": decision,
+        }
+        if decided_by is not None:
+            payload["decided_by"] = decided_by
+        if reason is not None:
+            payload["reason"] = reason
+        return self._request("POST", "/api/v1/org/policy/approvals/decide", payload=payload)
+
+    def list_org_approvals(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        params: dict[str, str] = {"limit": str(limit)}
+        if status:
+            params["status"] = status
+        query = urllib_parse.urlencode(params)
+        return self._request("GET", f"/api/v1/org/policy/approvals?{query}")
+
+    def list_org_audit_events(
+        self,
+        *,
+        event_type: str | None = None,
+        tool_name: str | None = None,
+        limit: int = 200,
+    ) -> dict[str, Any]:
+        params: dict[str, str] = {"limit": str(limit)}
+        if event_type:
+            params["event_type"] = event_type
+        if tool_name:
+            params["tool_name"] = tool_name
+        query = urllib_parse.urlencode(params)
+        return self._request("GET", f"/api/v1/org/policy/audit?{query}")
+
+    def get_org_policy_report(self, *, limit: int = 200) -> dict[str, Any]:
+        query = urllib_parse.urlencode({"limit": str(limit)})
+        return self._request("GET", f"/api/v1/org/policy/report?{query}")
 
     def _request(
         self,

@@ -16,6 +16,16 @@ from typing import Any
 
 
 DEFAULT_STORAGE_DIR = Path.home() / ".claude" / "memory"
+VALID_MEMORY_SCOPES: frozenset[str] = frozenset({"user", "project", "local"})
+DEFAULT_MEMORY_SCOPE = "project"
+
+
+def _normalize_memory_scope(scope: str | None) -> str:
+    """Normalize and validate memory scope."""
+    candidate = (scope or DEFAULT_MEMORY_SCOPE).strip().lower()
+    if candidate not in VALID_MEMORY_SCOPES:
+        raise ValueError(f"Invalid memory scope: {scope}")
+    return candidate
 
 
 @dataclass(slots=True)
@@ -77,6 +87,31 @@ class SessionMemory:
         """
         safe_name = hashlib.md5(namespace.encode()).hexdigest()[:16]
         return self._storage_dir / f"{safe_name}.json"
+
+    @staticmethod
+    def _scope_namespace(
+        scope: str,
+        working_directory: Path | str | None = None,
+    ) -> str:
+        """Build deterministic namespace for a memory scope."""
+        normalized_scope = _normalize_memory_scope(scope)
+        if normalized_scope == "user":
+            return "user"
+
+        base_path = Path(working_directory).expanduser() if working_directory else Path.cwd()
+        resolved = str(base_path.resolve(strict=False))
+        digest = hashlib.md5(resolved.encode("utf-8")).hexdigest()[:16]
+        return f"{normalized_scope}:{digest}"
+
+    @classmethod
+    def _scoped_key(
+        cls,
+        scope: str,
+        key: str,
+        working_directory: Path | str | None = None,
+    ) -> str:
+        namespace = cls._scope_namespace(scope, working_directory=working_directory)
+        return f"{namespace}/{key}"
 
     def _load(self) -> None:
         """Load memory from disk."""
@@ -313,6 +348,118 @@ class SessionMemory:
                     updated_at=now,
                 )
             self._save()
+
+    async def set_scoped(
+        self,
+        scope: str,
+        key: str,
+        value: Any,
+        *,
+        working_directory: Path | str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Store value inside a scoped memory namespace."""
+        normalized_scope = _normalize_memory_scope(scope)
+        namespaced_key = self._scoped_key(
+            normalized_scope,
+            key,
+            working_directory=working_directory,
+        )
+        namespace = self._scope_namespace(
+            normalized_scope,
+            working_directory=working_directory,
+        )
+        merged_tags = list(tags or [])
+        scope_tag = f"scope:{normalized_scope}"
+        if scope_tag not in merged_tags:
+            merged_tags.append(scope_tag)
+        merged_metadata = dict(metadata or {})
+        merged_metadata.setdefault("scope", normalized_scope)
+        merged_metadata.setdefault("scope_namespace", namespace)
+        await self.set(
+            namespaced_key,
+            value,
+            tags=merged_tags,
+            metadata=merged_metadata,
+        )
+
+    async def get_scoped(
+        self,
+        scope: str,
+        key: str,
+        *,
+        working_directory: Path | str | None = None,
+        default: Any = None,
+    ) -> Any:
+        """Read value from a scoped memory namespace."""
+        normalized_scope = _normalize_memory_scope(scope)
+        namespaced_key = self._scoped_key(
+            normalized_scope,
+            key,
+            working_directory=working_directory,
+        )
+        return await self.get(namespaced_key, default)
+
+    async def delete_scoped(
+        self,
+        scope: str,
+        key: str,
+        *,
+        working_directory: Path | str | None = None,
+    ) -> bool:
+        """Delete value from a scoped memory namespace."""
+        normalized_scope = _normalize_memory_scope(scope)
+        namespaced_key = self._scoped_key(
+            normalized_scope,
+            key,
+            working_directory=working_directory,
+        )
+        return await self.delete(namespaced_key)
+
+    async def keys_scoped(
+        self,
+        scope: str,
+        *,
+        working_directory: Path | str | None = None,
+    ) -> list[str]:
+        """List keys inside a scoped memory namespace."""
+        normalized_scope = _normalize_memory_scope(scope)
+        namespace = self._scope_namespace(
+            normalized_scope,
+            working_directory=working_directory,
+        )
+        prefix = f"{namespace}/"
+        scoped_keys = await self.keys(pattern=f"{prefix}*")
+        return [key[len(prefix) :] for key in scoped_keys if key.startswith(prefix)]
+
+    def snapshot_scoped(
+        self,
+        scope: str,
+        *,
+        working_directory: Path | str | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Build best-effort scoped snapshot for runtime context injection."""
+        normalized_scope = _normalize_memory_scope(scope)
+        namespace = self._scope_namespace(
+            normalized_scope,
+            working_directory=working_directory,
+        )
+        prefix = f"{namespace}/"
+        snapshot: dict[str, Any] = {}
+        for key, entry in self._memory.items():
+            if not key.startswith(prefix):
+                continue
+            short_key = key[len(prefix) :]
+            snapshot[short_key] = entry.value
+            if len(snapshot) >= limit:
+                break
+        return snapshot
+
+    def supported_scopes(self) -> tuple[str, ...]:
+        """Return supported memory scopes."""
+        return tuple(sorted(VALID_MEMORY_SCOPES))
 
     async def set_knowledge(
         self,
