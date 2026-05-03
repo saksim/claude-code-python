@@ -354,3 +354,90 @@ CLI/REPL
 ### 10.6 当前剩余问题（按严重性）
 
 - 已完成本轮目标内问题清零；当前未发现阻塞级残留项。
+
+### 10.7 增量迭代（2026-04-17，第4轮）
+
+- [x] 修复默认工具注册表构建断点：`create_default_registry()` 不再在构建阶段一次性导入全部工具模块。
+- [x] 修复 `lsp` 工具导入路径错误：由错误的 `claude_code.tools.lsp` 改为实际实现 `claude_code.tools.analysis.lsp`。
+- [x] 将默认工具注册改为“模块路径 + 类名”懒加载规范，避免单个工具模块异常阻断整个注册表。
+- [x] 提升 registry 预加载健壮性：`preload()` 对加载失败工具做容错，确保主流程可继续。
+
+对应文件：
+
+- `claude_code/tools/registry.py`
+- `tests/test_tools_registry_runtime.py`
+
+回归验证：
+
+- `D:\code_environment\anaconda_all_css\py311\python.exe -m pytest -q -c pytest.ini tests/test_tools_registry_runtime.py tests/test_query_engine_runtime.py`
+- 结果：`12 passed`
+
+新增测试覆盖：
+
+- `tests/test_tools_registry_runtime.py`
+  - 覆盖：默认注册表构建阶段不触发模块导入（验证真正的模块级懒加载）。
+  - 覆盖：默认注册表包含关键工具名（含 `lsp` / `cron_create`）。
+  - 覆盖：`lsp` 工具可从默认注册表正常解析。
+
+本轮解决的问题：
+
+- 解决了默认注册表在运行时可能因 `LSPTool` 导入路径错误直接抛 `ImportError`、导致主链路不可用的问题。
+- 解决了“lazy 仅延迟实例化、不延迟模块导入”的实现偏差，降低初始化阶段耦合与失败面。
+
+### 10.8 增量迭代（2026-04-17，第5轮）
+
+- [x] 继续闭环 `P1-5`：`ClaudeMdLoader` 的目录遍历顺序修正为“从根目录到当前目录”。
+- [x] 移除 `load_content()` 的宽泛异常吞没：由 `except Exception` 收敛为 `except (OSError, UnicodeError)`，并输出可观测 warning 日志。
+- [x] 增加路径展示一致性：新增 `_display_path()`，优先以工作目录相对路径展示，跨层级时回退 `os.path.relpath`。
+- [x] 测试临时目录治理：将 `tests/.tmp_context/` 纳入 `.gitignore`，避免运行时临时工件污染工作区。
+
+对应文件：
+
+- `claude_code/engine/context.py`
+- `tests/test_context_builder_runtime.py`
+- `.gitignore`
+
+回归验证：
+
+- `D:\code_environment\anaconda_all_css\py311\python.exe -m pytest -q -c pytest.ini tests/test_context_builder_runtime.py tests/test_query_engine_runtime.py`
+- 结果：`12 passed`
+
+新增测试覆盖：
+
+- `tests/test_context_builder_runtime.py`
+  - 覆盖：`find_claude_md_files()` 按 root -> current 顺序返回。
+  - 覆盖：`load_content()` 组合内容顺序与目录层级一致。
+  - 覆盖：单个 `CLAUDE.md` 读取失败时不影响其他文件加载。
+
+本轮解决的问题：
+
+- 解决了 `CLAUDE.md` 多层级加载顺序与文档声明不一致的问题（此前为 current -> root）。
+- 解决了 `load_content()` 对所有异常静默吞没的问题，避免真实 IO/编码故障无迹可查。
+
+### 10.9 后续迭代待办（建议顺序）
+
+- [ ] **P1-4：AgentTool 后台路径上下文继承一致性**
+  - 目标：`run_in_background=True` 与同步路径在 `working_directory`、`tool_registry`、`permission_mode`、`provider/model` 上行为一致。
+  - 验收：新增回归测试覆盖同步/后台两条路径，确保同一输入下工具执行目录与权限判定一致。
+
+- [ ] **P1-2：配置单一事实源（Config-Driven Runtime）**
+  - 目标：`create_engine()` / `setup_api_client()` 统一从 `Config` 读取，明确优先级（CLI > 本地配置 > 全局配置 > 环境变量 > 默认值）。
+  - 验收：`/model`、配置文件和环境变量对运行时生效行为一致，新增端到端配置优先级测试。
+
+- [ ] **P0-2：MCP 主链路契约化验证（connect -> initialize -> list -> call -> read）**
+  - 目标：补齐 MCP 客户端主链路契约测试，覆盖请求-响应闭环、通知分发、断连与超时清理。
+  - 验收：新增 `tests/test_services_mcp_contract.py`（或等价文件），通过后可稳定验证三类 transport 的最小可用语义。
+
+- [ ] **P2-6：QueryEngine 公共接口收敛与类型治理**
+  - 目标：减少公共接口层 `Any`，收敛未完工/占位式接口，降低调用方歧义。
+  - 验收：补齐关键接口类型标注，新增静态检查与运行时回归（至少覆盖 query loop / tool execution / response normalization）。
+
+- [ ] **发布链路稳定化（CI Smoke）**
+  - 目标：把“可运行”升级为“可分发”，在 CI 中固化基础发布验证。
+  - 验收：至少包含 `python -m build`、wheel 安装校验、`claude --version` / 单条 smoke 命令可运行。
+
+#### 10.9.1 每轮迭代统一回归基线（建议）
+
+- `D:\code_environment\anaconda_all_css\py311\python.exe -m pytest -q -c pytest.ini`
+- 若本轮涉及 MCP：追加 `tests/test_services_mcp_runtime.py` + 契约测试文件
+- 若本轮涉及启动/注册：追加 `tests/test_tools_registry_runtime.py` + `tests/test_query_engine_runtime.py`

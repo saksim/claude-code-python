@@ -111,6 +111,7 @@ Communication style:
 - Be concise and practical
 - Show code changes clearly
 - Ask clarifying questions when needed""",
+            memory="project",
         ),
         "editor": AgentDefinition(
             agent_type="editor",
@@ -130,6 +131,7 @@ Guidelines:
 - Be careful with indentation
 - Make one change at a time
 - Don't add unnecessary comments or formatting""",
+            memory="project",
         ),
         "reviewer": AgentDefinition(
             agent_type="reviewer",
@@ -153,6 +155,7 @@ Output format:
 - Suggested fix
 
 Be constructive and specific.""",
+            memory="project",
         ),
         "debugger": AgentDefinition(
             agent_type="debugger",
@@ -172,6 +175,7 @@ Guidelines:
 - Read relevant code thoroughly
 - Test potential fixes
 - Explain the root cause""",
+            memory="project",
         ),
         "tester": AgentDefinition(
             agent_type="tester",
@@ -192,6 +196,7 @@ Guidelines:
 - Test edge cases
 - Follow testing best practices
 - Make tests readable and maintainable""",
+            memory="project",
         ),
         "researcher": AgentDefinition(
             agent_type="researcher",
@@ -213,6 +218,7 @@ Guidelines:
 - Provide sources when available
 - Summarize key points clearly
 - Present options with tradeoffs""",
+            memory="user",
         ),
         "architect": AgentDefinition(
             agent_type="architect",
@@ -233,6 +239,7 @@ Guidelines:
 - Propose multiple approaches
 - Explain tradeoffs
 - Support decisions with rationale""",
+            memory="project",
         ),
         "docs-writer": AgentDefinition(
             agent_type="docs-writer",
@@ -253,6 +260,7 @@ Guidelines:
 - Use examples
 - Follow documentation best practices
 - Keep docs up to date""",
+            memory="project",
         ),
         "quick": AgentDefinition(
             agent_type="quick",
@@ -269,6 +277,7 @@ Use for:
 - Quick lookups
 
 Be fast and concise. Don't overthink.""",
+            memory="local",
         ),
         "deep": AgentDefinition(
             agent_type="deep",
@@ -287,6 +296,7 @@ Use for:
 
 Be thorough. Take time to understand the full context.
 Consider multiple approaches before deciding.""",
+            memory="project",
         ),
     }
 

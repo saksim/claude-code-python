@@ -16,6 +16,7 @@ from claude_code.tasks.factory import (
     create_task_queue,
 )
 from claude_code.tasks.queue import InMemoryTaskQueue
+from claude_code.tasks.repository import SQLiteRuntimeTaskRepository
 
 
 @contextmanager
@@ -40,14 +41,15 @@ def test_factory_redis_backend_not_yet_wired():
 
 def test_factory_creates_runtime_repository_and_manager():
     with _temp_runtime_workdir() as workdir:
-        repo = create_runtime_repository(workdir, "file")
+        repo = create_runtime_repository(workdir, "sqlite")
         assert repo is not None
+        assert isinstance(repo, SQLiteRuntimeTaskRepository)
 
         manager = create_task_manager(
             TaskBackendConfig(
                 working_directory=workdir,
                 queue_backend="memory",
-                runtime_backend="file",
+                runtime_backend="sqlite",
             )
         )
         stats = manager.get_stats()

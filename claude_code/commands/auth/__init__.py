@@ -10,9 +10,73 @@ Following TOP Python Dev standards:
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from claude_code.commands.base import Command, CommandContext, CommandResult, CommandType
+from claude_code.config import get_config, save_config
+
+
+_OPENAI_FAMILY_PROVIDERS: set[str] = {"openai", "ollama", "vllm", "deepseek"}
+_KEYLESS_PROVIDERS: set[str] = {"bedrock", "vertex"}
+_ALL_KEY_ENV_VARS: tuple[str, ...] = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY")
+
+
+def _resolve_provider() -> str:
+    """Resolve active provider using runtime precedence."""
+    config = get_config()
+    provider = os.getenv("CLAUDE_API_PROVIDER", getattr(config, "api_provider", "anthropic"))
+    return str(provider).lower()
+
+
+def _provider_env_key(provider: str) -> str | None:
+    """Return provider-specific API key environment variable name."""
+    if provider == "anthropic":
+        return "ANTHROPIC_API_KEY"
+    if provider in _OPENAI_FAMILY_PROVIDERS:
+        return "OPENAI_API_KEY"
+    if provider == "azure":
+        return "AZURE_OPENAI_API_KEY"
+    return None
+
+
+def _is_config_key_usable(provider: str, config_provider: str) -> bool:
+    """Check whether persisted config.api_key is applicable for active provider."""
+    if provider == "anthropic":
+        return config_provider == "anthropic"
+    if provider in _OPENAI_FAMILY_PROVIDERS:
+        return config_provider in _OPENAI_FAMILY_PROVIDERS
+    if provider == "azure":
+        return config_provider == "azure"
+    return False
+
+
+def _resolve_auth_key() -> tuple[str, str | None, str | None]:
+    """Resolve runtime authentication key and its source.
+
+    Returns:
+        Tuple of (provider, key, source) where source is "env", "config", or None.
+    """
+    config = get_config()
+    provider = _resolve_provider()
+    env_key_name = _provider_env_key(provider)
+    env_key_value = os.getenv(env_key_name) if env_key_name else None
+
+    config_provider = str(getattr(config, "api_provider", "anthropic")).lower()
+    config_api_key = getattr(config, "api_key", None)
+    config_key_value = config_api_key if _is_config_key_usable(provider, config_provider) else None
+
+    if env_key_value:
+        return provider, env_key_value, "env"
+    if config_key_value:
+        return provider, str(config_key_value), "config"
+    return provider, None, None
+
+
+def _mask_key(key: str) -> str:
+    """Mask API key for display."""
+    if len(key) <= 8:
+        return "*" * len(key)
+    suffix = key[-4:] if len(key) > 12 else key[-2:]
+    return f"{key[:8]}...{suffix}"
 
 
 class LoginCommand(Command):
@@ -41,43 +105,52 @@ class LoginCommand(Command):
         Returns:
             CommandResult with login instructions.
         """
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        api_url = os.environ.get("ANTHROPIC_API_URL")
-        
-        if api_key:
+        provider, api_key, source = _resolve_auth_key()
+
+        if provider in _KEYLESS_PROVIDERS:
             return CommandResult(
-                content="You are already logged in. Use /logout to sign out first.",
+                content=(
+                    "# Login to Claude Code\n\n"
+                    f"Provider `{provider}` uses cloud credentials and does not require an API key.\n"
+                    "No /login action is required."
+                ),
             )
-        
-        return CommandResult(content="""# Login to Claude Code
 
-To login, you need an Anthropic API key:
-
-1. Visit https://console.anthropic.com/settings/keys
-2. Create a new API key
-3. Set it as an environment variable:
-
-   export ANTHROPIC_API_KEY="sk-ant-api03-..."
-
-Or add it to your config:
-
-   claude config set api_key "sk-ant-api03-..."
-
-For more login options, visit the documentation.""")
-    
-    def _check_existing_login(self) -> str | None:
-        """Check if user is already logged in.
-        
-        Returns:
-            Masked API key if logged in, None otherwise.
-        """
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        
         if api_key:
-            if api_key.startswith("sk-ant-"):
-                return f"sk-ant-{'*' * 20}{api_key[-4:]}"
-        
-        return None
+            source_label = "environment variable" if source == "env" else "config file"
+            return CommandResult(
+                content=(
+                    "You are already logged in.\n\n"
+                    f"Provider: {provider}\n"
+                    f"Source: {source_label}\n"
+                    f"Key: {_mask_key(api_key)}\n\n"
+                    "Use /logout to sign out first."
+                ),
+            )
+
+        env_key_name = _provider_env_key(provider) or "ANTHROPIC_API_KEY"
+        if provider == "anthropic":
+            login_help = (
+                "1. Visit https://console.anthropic.com/settings/keys\n"
+                "2. Create a new API key\n"
+                "3. Set environment variable:\n\n"
+                f'   export {env_key_name}="sk-ant-api03-..."\n'
+            )
+        else:
+            login_help = (
+                "Set your API key as environment variable:\n\n"
+                f'   export {env_key_name}="<your-api-key>"\n'
+            )
+
+        return CommandResult(
+            content=(
+                "# Login to Claude Code\n\n"
+                f"Active provider: {provider}\n\n"
+                f"{login_help}\n"
+                "Or persist in config:\n\n"
+                '   claude config set api_key "<your-api-key>"\n'
+            ),
+        )
 
 
 class LogoutCommand(Command):
@@ -106,20 +179,28 @@ class LogoutCommand(Command):
         Returns:
             CommandResult indicating logout success.
         """
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        
-        if not api_key:
+        cleared_sources: list[str] = []
+
+        for env_key in _ALL_KEY_ENV_VARS:
+            if os.environ.pop(env_key, None) is not None:
+                cleared_sources.append(f"env:{env_key}")
+
+        config = get_config()
+        if getattr(config, "api_key", None):
+            config.api_key = None
+            save_config()
+            cleared_sources.append("config:api_key")
+
+        if not cleared_sources:
             return CommandResult(content="You are not logged in.")
-        
-        config = ConfigManager()
-        saved_key = config.get("api_key")
-        
-        if saved_key:
-            config.set("api_key", None)
-        
-        os.environ.pop("ANTHROPIC_API_KEY", None)
-        
-        return CommandResult(content="Logged out successfully.")
+
+        return CommandResult(
+            content=(
+                "Logged out successfully.\n\n"
+                "Cleared sources:\n"
+                + "\n".join(f"- {source}" for source in cleared_sources)
+            ),
+        )
 
 
 class AuthStatusCommand(Command):
@@ -147,31 +228,43 @@ class AuthStatusCommand(Command):
         Returns:
             CommandResult with authentication status.
         """
-        from claude_code.api.client import APIClient, APIClientConfig
-        
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        
-        config = ConfigManager()
-        saved_key = config.get("api_key")
-        
-        has_key = bool(api_key or saved_key)
-        
-        if has_key:
-            masked = "sk-ant-***" if (api_key or saved_key) else None
-            return CommandResult(content=f"""# Authentication Status
+        provider, api_key, source = _resolve_auth_key()
+        env_key_name = _provider_env_key(provider)
 
-Status: Logged in
-API Key: {masked}
+        if provider in _KEYLESS_PROVIDERS:
+            return CommandResult(
+                content=(
+                    "# Authentication Status\n\n"
+                    "Status: Credential-based\n"
+                    f"Provider: {provider}\n"
+                    "API Key: not required\n\n"
+                    "This provider uses cloud credentials instead of API keys."
+                ),
+            )
 
-To logout: claude logout
-""")
-        else:
-            return CommandResult(content="""# Authentication Status
+        if api_key:
+            source_label = "environment variable" if source == "env" else "config file"
+            return CommandResult(
+                content=(
+                    "# Authentication Status\n\n"
+                    "Status: Logged in\n"
+                    f"Provider: {provider}\n"
+                    f"Source: {source_label}\n"
+                    f"API Key: {_mask_key(api_key)}\n\n"
+                    "To logout: claude logout"
+                ),
+            )
 
-Status: Not logged in
-
-To login, visit: https://console.anthropic.com/settings/keys
-""")
+        return CommandResult(
+            content=(
+                "# Authentication Status\n\n"
+                "Status: Not logged in\n"
+                f"Provider: {provider}\n"
+                f"Expected Key: {env_key_name or 'N/A'}\n\n"
+                f"To login, set {env_key_name or 'an appropriate key env var'} "
+                "or run: claude config set api_key \"<your-api-key>\""
+            ),
+        )
 
 
 def create_auth_commands() -> dict[str, Command]:

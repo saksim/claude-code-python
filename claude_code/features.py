@@ -6,8 +6,8 @@ Runtime feature toggles inspired by TS version
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass, replace
 from typing import Callable, Optional
-from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -42,7 +42,16 @@ class FeatureRegistry:
     def __init__(self):
         self._features: dict[Feature, FeatureConfig] = {}
         self._feature_checks: dict[Feature, Callable[[], bool]] = {}
+        self._explicit_overrides: set[Feature] = set()
         self._initialize_defaults()
+
+    @staticmethod
+    def _env_enabled(env_var: str) -> bool:
+        """Resolve boolean value from environment variable."""
+        value = os.environ.get(env_var)
+        if value is None:
+            return False
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
     
     def _initialize_defaults(self) -> None:
         """Initialize default feature configurations."""
@@ -61,7 +70,7 @@ class FeatureRegistry:
         ]
         
         for feature, env_var, description in defaults:
-            default_value = os.environ.get(env_var, "") == "1"
+            default_value = self._env_enabled(env_var)
             self._features[feature] = FeatureConfig(
                 name=feature,
                 env_var=env_var,
@@ -80,21 +89,38 @@ class FeatureRegistry:
             return self._feature_checks[feature]()
         
         config = self._features.get(feature)
-        if config:
+        if config is None:
+            env_var = f"FEATURE_{feature.value.upper()}"
+            return self._env_enabled(env_var)
+
+        if feature in self._explicit_overrides:
             return config.enabled
-        
-        env_var = f"FEATURE_{feature.value.upper()}"
-        return os.environ.get(env_var, "") == "1"
+        if config.env_var in os.environ:
+            return self._env_enabled(config.env_var)
+        return config.default_value
     
     def enable(self, feature: Feature) -> None:
         """Enable a feature."""
         if feature in self._features:
-            self._features[feature].enabled = True
+            self._features[feature] = replace(self._features[feature], enabled=True)
+            self._explicit_overrides.add(feature)
     
     def disable(self, feature: Feature) -> None:
         """Disable a feature."""
         if feature in self._features:
-            self._features[feature].enabled = False
+            self._features[feature] = replace(self._features[feature], enabled=False)
+            self._explicit_overrides.add(feature)
+
+    def _resolve_source(self, feature: Feature) -> str:
+        """Resolve the active source for a feature value."""
+        if feature in self._feature_checks:
+            return "check"
+        if feature in self._explicit_overrides:
+            return "runtime"
+        config = self._features[feature]
+        if config.env_var in os.environ:
+            return "env"
+        return "default"
     
     def get_enabled_features(self) -> list[Feature]:
         """Get list of enabled features."""
@@ -104,9 +130,11 @@ class FeatureRegistry:
         """Get all feature configurations."""
         return {
             f.value: {
-                "enabled": config.enabled,
+                "enabled": self.is_enabled(f),
                 "env_var": config.env_var,
                 "description": config.description,
+                "default_value": config.default_value,
+                "source": self._resolve_source(f),
             }
             for f, config in self._features.items()
         }
@@ -130,7 +158,7 @@ def feature(name: str) -> bool:
         return get_feature_registry().is_enabled(feature_enum)
     except ValueError:
         env_var = f"FEATURE_{name.upper()}"
-        return os.environ.get(env_var, "") == "1"
+        return FeatureRegistry._env_enabled(env_var)
 
 
 __all__ = [

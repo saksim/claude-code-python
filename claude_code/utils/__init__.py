@@ -4,6 +4,8 @@ Claude Code Python - Utility Modules
 Common utility functions for file operations, formatting, git, shell, etc.
 """
 
+import warnings
+
 from claude_code.utils.errors import (
     ClaudeCodeError,
     AbortError,
@@ -126,7 +128,9 @@ from claude_code.utils.json import (
     unflatten_json,
 )
 
-from claude_code.utils.features import FeatureDiscovery, FeatureInfo
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    from claude_code.utils.features import FeatureDiscovery, FeatureInfo
 
 __all__ = [
     # Errors

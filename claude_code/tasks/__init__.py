@@ -39,8 +39,10 @@ from claude_code.tasks.repository import (
     RuntimeTaskRepositoryConfig,
     RuntimeTaskRepository,
     FileRuntimeTaskRepository,
+    SQLiteRuntimeTaskRepository,
     create_file_task_repository,
     create_file_runtime_task_repository,
+    create_sqlite_runtime_task_repository,
 )
 from claude_code.tasks.queue import (
     QueueItem,
@@ -54,6 +56,7 @@ from claude_code.tasks.factory import (
     create_task_queue,
     create_runtime_repository,
     create_task_manager,
+    create_task_manager_with_event_journal,
 )
 
 __all__ = [
@@ -87,8 +90,10 @@ __all__ = [
     "RuntimeTaskRepositoryConfig",
     "RuntimeTaskRepository",
     "FileRuntimeTaskRepository",
+    "SQLiteRuntimeTaskRepository",
     "create_file_task_repository",
     "create_file_runtime_task_repository",
+    "create_sqlite_runtime_task_repository",
     
     # Queue
     "QueueItem",
@@ -102,6 +107,7 @@ __all__ = [
     "create_task_queue",
     "create_runtime_repository",
     "create_task_manager",
+    "create_task_manager_with_event_journal",
 ]
 
 

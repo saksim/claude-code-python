@@ -10,6 +10,7 @@ from typing import Optional, Callable, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from claude_code.services.event_journal import EventJournal
 from claude_code.tasks.types import (
     Task,
     TaskType,
@@ -77,6 +78,7 @@ class TaskManager:
         task_queue: Optional[TaskQueue] = None,
         runtime_repository: Optional[RuntimeTaskRepository] = None,
         max_concurrency: Optional[int] = None,
+        event_journal: Optional[EventJournal] = None,
     ):
         if max_concurrency is not None and max_concurrency <= 0:
             raise ValueError("max_concurrency must be > 0 when provided")
@@ -92,6 +94,7 @@ class TaskManager:
         self._attempt_counts: dict[str, int] = {}
         self._task_queue: TaskQueue = task_queue or InMemoryTaskQueue()
         self._runtime_repository = runtime_repository
+        self._event_journal = event_journal
         self._max_concurrency = max_concurrency
         self._queue_lag_samples: list[float] = []
         self._execution_samples: list[float] = []
@@ -167,6 +170,7 @@ class TaskManager:
         tools: Optional[list] = None,
         background: bool = True,
         idempotency_key: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> AgentTask:
         """Create an agent task."""
         if idempotency_key:
@@ -187,6 +191,8 @@ class TaskManager:
             tools=tools,
             is_backgrounded=background,
         )
+        if metadata:
+            task.metadata.update(dict(metadata))
         if idempotency_key:
             task.metadata["idempotency_key"] = idempotency_key
             self._idempotency_index[idempotency_key] = task.id
@@ -441,11 +447,45 @@ class TaskManager:
     
     def _emit_event(self, event: TaskEvent) -> None:
         """Emit a task event."""
+        self._record_journal_event(event)
         for handler in self._event_handlers:
             try:
                 handler(event)
             except Exception:
                 pass
+
+    def _record_journal_event(self, event: TaskEvent) -> None:
+        """Persist normalized task lifecycle event into runtime event journal."""
+        if self._event_journal is None:
+            return
+
+        task = self._tasks.get(event.task_id)
+        task_type: str | None = None
+        task_status: str | None = None
+        task_metadata: dict[str, Any] = {}
+        if task is not None:
+            task_type = task.type.value if hasattr(task.type, "value") else str(task.type)
+            task_status = task.status.value if hasattr(task.status, "value") else str(task.status)
+            task_metadata = dict(task.metadata)
+
+        session_id = task_metadata.get("session_id")
+        conversation_id = task_metadata.get("conversation_id")
+        self._event_journal.append_event(
+            event_type=f"task.{event.event_type}",
+            payload={
+                "task_id": event.task_id,
+                "task_type": task_type,
+                "task_status": task_status,
+                "event_data": dict(event.data),
+            },
+            session_id=session_id if isinstance(session_id, str) else None,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            source="task_manager",
+            metadata={
+                "task_event_type": event.event_type,
+            },
+            timestamp=event.timestamp.timestamp(),
+        )
     
     async def wait_for_task(
         self,

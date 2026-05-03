@@ -256,6 +256,108 @@ class HistoryManager:
                     break
         
         return results
+
+    def archive_session_messages(
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        *,
+        working_directory: str | None = None,
+        model: str | None = None,
+        replace_existing: bool = False,
+    ) -> int:
+        """Archive persisted session messages into history storage.
+
+        Session is the source-of-truth for active conversations. This method
+        materializes a stable, searchable archive in history.
+
+        Args:
+            session_id: Session identifier.
+            messages: Serialized session message list.
+            working_directory: Optional working directory metadata.
+            model: Optional model metadata.
+            replace_existing: If True, drop existing archive entries for session first.
+
+        Returns:
+            Number of newly archived entries.
+        """
+        if replace_existing:
+            self._entries = [
+                entry
+                for entry in self._entries
+                if entry.metadata.get("session_id") != session_id
+            ]
+
+        existing_message_ids = {
+            str(entry.metadata.get("message_id"))
+            for entry in self._entries
+            if entry.metadata.get("session_id") == session_id
+            and entry.metadata.get("message_id") is not None
+        }
+
+        archived_count = 0
+        now = time.time()
+        for index, message in enumerate(messages):
+            message_id = str(message.get("id") or f"message-{index}")
+            if message_id in existing_message_ids:
+                continue
+
+            role = str(message.get("role", "assistant"))
+            content = message.get("content", "")
+            timestamp = float(message.get("timestamp") or now)
+
+            metadata = dict(message.get("metadata") or {})
+            metadata.update(
+                {
+                    "session_id": session_id,
+                    "message_id": message_id,
+                    "archived_from": "session",
+                }
+            )
+            if working_directory:
+                metadata["working_directory"] = working_directory
+            if model:
+                metadata["model"] = model
+            if message.get("tool_call_id"):
+                metadata["tool_call_id"] = message.get("tool_call_id")
+            if message.get("tool_name"):
+                metadata["tool_name"] = message.get("tool_name")
+
+            self._entries.append(
+                HistoryEntry(
+                    id=f"{session_id}:{message_id}",
+                    role=role,
+                    content=content,
+                    timestamp=timestamp,
+                    metadata=metadata,
+                )
+            )
+            existing_message_ids.add(message_id)
+            archived_count += 1
+
+        if len(self._entries) > self._max_entries:
+            self._entries = self._entries[-self._max_entries :]
+
+        if archived_count > 0:
+            self.save()
+
+        return archived_count
+
+    def get_session_entries(
+        self,
+        session_id: str,
+        limit: Optional[int] = None,
+    ) -> list[HistoryEntry]:
+        """Get archived history entries for a specific session."""
+        entries = [
+            entry
+            for entry in self._entries
+            if entry.metadata.get("session_id") == session_id
+        ]
+        entries.sort(key=lambda item: item.timestamp)
+        if limit:
+            return entries[-limit:]
+        return entries
     
     def clear(self) -> None:
         """Clear all history and generate a new session ID."""

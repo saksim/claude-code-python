@@ -164,6 +164,47 @@ from claude_code.services.event_bus import (
     APIEvents,
     SystemEvents,
 )
+from claude_code.services.event_journal import (
+    EVENT_JOURNAL_SCHEMA_VERSION,
+    EVENT_JOURNAL_SCHEMA_KEY,
+    EventJournal,
+    EventJournalEntry,
+    SQLiteEventJournal,
+    get_event_journal,
+    set_event_journal,
+)
+from claude_code.services.multi_agent_supervisor import (
+    SupervisorConfigError,
+    NodeExecutionStatus,
+    AgentNodeSpec,
+    SupervisorBudget,
+    NodeExecutionResult,
+    SupervisorRunResult,
+    MultiAgentSupervisor,
+)
+from claude_code.services.artifact_bus import (
+    ArtifactSchemaError,
+    ArtifactConflictError,
+    ArtifactType,
+    ArtifactMergeStrategy,
+    ArtifactRecord,
+    ArtifactBus,
+)
+from claude_code.services.github_ci_workflow import (
+    GitHubCIWorkflowError,
+    WorkflowStepStatus,
+    WorkflowStepRecord,
+    GitHubCIWorkflowService,
+)
+from claude_code.services.org_policy_audit import (
+    OrgPolicyAuditError,
+    PolicyEffect,
+    ApprovalStatus,
+    OrgPolicyRule,
+    ApprovalRequest,
+    AuditEvent,
+    OrgPolicyAuditService,
+)
 
 from claude_code.services.websocket import (
     WebSocketServer,
@@ -314,6 +355,39 @@ __all__ = [
     "ToolEvents",
     "APIEvents",
     "SystemEvents",
+
+    # Event Journal
+    "EVENT_JOURNAL_SCHEMA_VERSION",
+    "EVENT_JOURNAL_SCHEMA_KEY",
+    "EventJournal",
+    "EventJournalEntry",
+    "SQLiteEventJournal",
+    "get_event_journal",
+    "set_event_journal",
+    "SupervisorConfigError",
+    "NodeExecutionStatus",
+    "AgentNodeSpec",
+    "SupervisorBudget",
+    "NodeExecutionResult",
+    "SupervisorRunResult",
+    "MultiAgentSupervisor",
+    "ArtifactSchemaError",
+    "ArtifactConflictError",
+    "ArtifactType",
+    "ArtifactMergeStrategy",
+    "ArtifactRecord",
+    "ArtifactBus",
+    "GitHubCIWorkflowError",
+    "WorkflowStepStatus",
+    "WorkflowStepRecord",
+    "GitHubCIWorkflowService",
+    "OrgPolicyAuditError",
+    "PolicyEffect",
+    "ApprovalStatus",
+    "OrgPolicyRule",
+    "ApprovalRequest",
+    "AuditEvent",
+    "OrgPolicyAuditService",
     
     # WebSocket
     "WebSocketServer",

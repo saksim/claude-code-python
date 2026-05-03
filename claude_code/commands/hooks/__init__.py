@@ -4,10 +4,10 @@ Claude Code Python - Hooks Command
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from claude_code.commands.base import Command, CommandContext, CommandResult, CommandType
+from claude_code.services.hooks_manager import HookEvent, HooksManager
 
 
 class HooksCommand(Command):
@@ -44,61 +44,76 @@ class HooksCommand(Command):
         
         return CommandResult(success=False, error=f"Unknown: {subcmd}")
     
-    async def _list_hooks(self, context: CommandContext) -> CommandResult:
+    def _resolve_manager(self, context: CommandContext) -> HooksManager:
+        engine = getattr(context, "engine", None)
+        manager = getattr(engine, "hooks_manager", None)
+        if (
+            manager is not None
+            and hasattr(manager, "list_hooks")
+            and hasattr(manager, "add_hook")
+            and hasattr(manager, "remove_hook")
+        ):
+            return manager
+
         hooks_file = Path(context.working_directory) / ".claude" / "hooks.json"
-        
-        if not hooks_file.exists():
-            return CommandResult(content="No hooks configured")
-        
-        with open(hooks_file) as f:
-            hooks = json.load(f)
-        
+        return HooksManager(config_path=hooks_file)
+
+    def _parse_event(self, raw_event: str) -> HookEvent | None:
+        normalized = raw_event.strip().lower().replace("-", "_")
+        for event in HookEvent:
+            if normalized == event.value:
+                return event
+        return None
+
+    def _next_hook_name(self, manager: HooksManager) -> str:
+        existing = {hook.name for hook in manager.list_hooks(include_disabled=True)}
+        candidate = 1
+        while True:
+            name = f"hook-{candidate}"
+            if name not in existing:
+                return name
+            candidate += 1
+
+    async def _list_hooks(self, context: CommandContext) -> CommandResult:
+        manager = self._resolve_manager(context)
+        hooks = manager.list_hooks(include_disabled=True)
         if not hooks:
             return CommandResult(content="No hooks configured")
-        
+
         lines = ["# Hooks\n"]
-        for name, config in hooks.items():
-            lines.append(f"\n## {name}")
-            lines.append(f"Event: {config.get('event', 'N/A')}")
-            lines.append(f"Command: {config.get('command', 'N/A')}")
+        for hook in hooks:
+            lines.append(f"\n## {hook.name}")
+            lines.append(f"Event: {hook.event.value}")
+            lines.append(f"Command: {hook.command}")
+            lines.append(f"Enabled: {hook.enabled}")
+            lines.append(f"Timeout: {hook.timeout_seconds}s")
         
         return CommandResult(content="\n".join(lines))
     
     async def _add_hook(self, event: str, command: str, context: CommandContext) -> CommandResult:
-        hooks_dir = Path(context.working_directory) / ".claude"
-        hooks_dir.mkdir(exist_ok=True)
-        hooks_file = hooks_dir / "hooks.json"
-        
-        hooks = {}
-        if hooks_file.exists():
-            with open(hooks_file) as f:
-                hooks = json.load(f)
-        
-        name = f"hook-{len(hooks) + 1}"
-        hooks[name] = {"event": event, "command": command}
-        
-        with open(hooks_file, "w") as f:
-            json.dump(hooks, f, indent=2)
-        
+        parsed_event = self._parse_event(event)
+        if parsed_event is None:
+            allowed_events = ", ".join(h.value for h in HookEvent)
+            return CommandResult(
+                success=False,
+                error=f"Invalid event '{event}'. Allowed events: {allowed_events}",
+            )
+
+        manager = self._resolve_manager(context)
+        name = self._next_hook_name(manager)
+        manager.add_hook(
+            name=name,
+            event=parsed_event,
+            command=command,
+        )
         return CommandResult(content=f"Added hook: {name}")
     
     async def _remove_hook(self, name: str, context: CommandContext) -> CommandResult:
-        hooks_file = Path(context.working_directory) / ".claude" / "hooks.json"
-        
-        if not hooks_file.exists():
-            return CommandResult(success=False, error="No hooks configured")
-        
-        with open(hooks_file) as f:
-            hooks = json.load(f)
-        
-        if name not in hooks:
+        manager = self._resolve_manager(context)
+        removed = manager.remove_hook(name)
+        if not removed:
             return CommandResult(success=False, error=f"Hook not found: {name}")
-        
-        del hooks[name]
-        
-        with open(hooks_file, "w") as f:
-            json.dump(hooks, f, indent=2)
-        
+
         return CommandResult(content=f"Removed hook: {name}")
 
 

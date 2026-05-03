@@ -27,6 +27,7 @@ from claude_code.api.client import (
 from claude_code.tools import Tool, ToolRegistry, ToolContext, ToolResult, ToolDefinition
 from claude_code.tools.registry import create_default_registry
 from claude_code.permissions import create_permission_checker
+from claude_code.services.hooks_manager import HookEvent
 
 
 class StopReason(Enum):
@@ -154,6 +155,8 @@ class QueryConfig:
     always_allow: list[str] = field(default_factory=list)
     always_deny: list[str] = field(default_factory=list)
     session_id: Optional[str] = None
+    working_directory: Optional[str] = None
+    memory_scope: str = "project"
 
 
 @dataclass 
@@ -206,6 +209,31 @@ class QueryEngine:
         
         # Ensure model-visible tool list is populated from registry by default.
         self._ensure_configured_tools()
+
+    def _record_event(
+        self,
+        *,
+        event_type: str,
+        payload: Optional[dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Best-effort event journal write for runtime audit trail."""
+        journal = getattr(self, "event_journal", None)
+        append_event = getattr(journal, "append_event", None)
+        if not callable(append_event):
+            return
+        try:
+            append_event(
+                event_type=event_type,
+                payload=dict(payload or {}),
+                session_id=self.config.session_id,
+                conversation_id=self.conversation_id,
+                source="query_engine",
+                metadata=dict(metadata or {}),
+            )
+        except Exception:
+            # Journal persistence must not interrupt query execution.
+            pass
     
     def _ensure_configured_tools(self) -> None:
         """Populate query config tools from registry when not explicitly set."""
@@ -245,6 +273,23 @@ class QueryEngine:
         # Add user message
         user_message = self._create_user_message(user_input, attachments)
         self.messages.append(user_message)
+        self._sync_message_to_active_session(user_message)
+        self._record_event(
+            event_type="query.started",
+            payload={
+                "input": user_input,
+                "has_attachments": bool(attachments),
+                "memory_scope": self.config.memory_scope,
+            },
+        )
+        self._record_active_memory_hit(query_text=user_input)
+        self._record_event(
+            event_type="message.user",
+            payload={
+                "message_id": user_message.id,
+                "content": user_message.content,
+            },
+        )
         yield user_message
         
         # Build API messages
@@ -309,7 +354,15 @@ class QueryEngine:
                 
                 # Add to conversation
                 self.messages.append(assistant_message)
+                self._sync_message_to_active_session(assistant_message)
                 api_messages.append(assistant_message.to_param())
+                self._record_event(
+                    event_type="message.assistant",
+                    payload={
+                        "message_id": assistant_message.id,
+                        "content": assistant_message.content,
+                    },
+                )
                 yield assistant_message
                 
                 # Extract tool uses
@@ -317,6 +370,14 @@ class QueryEngine:
                 
                 if not tool_uses:
                     # No tool calls - done
+                    self._record_event(
+                        event_type="query.completed",
+                        payload={
+                            "stop_reason": StopReason.END_TURN.value,
+                            "message_count": len(self.messages),
+                            "tool_call_count": len(self.tool_results),
+                        },
+                    )
                     yield {
                         "type": "stop_reason",
                         "reason": StopReason.END_TURN.value
@@ -333,6 +394,7 @@ class QueryEngine:
                     yield result
                     tool_result_message = self._create_tool_result_message(result)
                     self.messages.append(tool_result_message)
+                    self._sync_message_to_active_session(tool_result_message)
                     api_messages.append(tool_result_message.to_param())
                 else:
                     # Multiple tools — execute in parallel when safe
@@ -354,6 +416,7 @@ class QueryEngine:
                             yield result
                             tool_result_message = self._create_tool_result_message(result)
                             self.messages.append(tool_result_message)
+                            self._sync_message_to_active_session(tool_result_message)
                             api_messages.append(tool_result_message.to_param())
                     else:
                         # Mixed or unsafe tools — execute sequentially
@@ -364,10 +427,29 @@ class QueryEngine:
                             yield result
                             tool_result_message = self._create_tool_result_message(result)
                             self.messages.append(tool_result_message)
+                            self._sync_message_to_active_session(tool_result_message)
                             api_messages.append(tool_result_message.to_param())
                 
             except Exception as e:
+                await self._trigger_hook_event(
+                    HookEvent.ON_ERROR,
+                    {
+                        "source": "query_engine",
+                        "phase": "query_loop",
+                        "conversation_id": self.conversation_id,
+                        "session_id": self.config.session_id or self.conversation_id,
+                        "working_directory": self.config.working_directory or os.getcwd(),
+                        "model": self.config.model,
+                        "error": str(e),
+                    },
+                )
                 yield {"type": "error", "error": str(e)}
+                self._record_event(
+                    event_type="query.error",
+                    payload={
+                        "error": str(e),
+                    },
+                )
                 yield {"type": "stop_reason", "reason": StopReason.ERROR.value}
                 break
     
@@ -544,28 +626,361 @@ class QueryEngine:
         self._cached_config_hash = config_hash
         self._cached_tools = tools
         return tools
+
+    def _sync_message_to_active_session(self, message: Message) -> None:
+        """Persist runtime message into active session source-of-truth."""
+        try:
+            from claude_code.engine.session import SessionManager
+        except Exception:
+            return
+
+        manager = getattr(self, "session_manager", None)
+        if not isinstance(manager, SessionManager):
+            return
+
+        session = manager.get_current_session()
+        target_session_id = self.config.session_id
+        if target_session_id and (session is None or session.id != target_session_id):
+            session = manager.switch_session(target_session_id)
+
+        if session is None:
+            session = manager.ensure_current_session()
+            self.config.session_id = session.id
+
+        if self.config.working_directory:
+            session.metadata.working_directory = self.config.working_directory
+        if self.config.model:
+            session.metadata.model = self.config.model
+
+        if session.has_message(message.id):
+            return
+
+        message_metadata = {
+            "conversation_id": self.conversation_id,
+            "source": "query_engine",
+        }
+        if message.name:
+            message_metadata["name"] = message.name
+        if message.tool_input is not None:
+            message_metadata["tool_input"] = message.tool_input
+
+        session.add_message(
+            role=message.role,
+            content=message.content,
+            id=message.id,
+            timestamp=message.timestamp,
+            tool_call_id=message.tool_call_id,
+            tool_name=message.tool_name,
+            metadata=message_metadata,
+        )
+
+    def _record_active_memory_hit(self, *, query_text: str) -> None:
+        """Record active memory match information for runtime observability."""
+        memory = getattr(self, "memory", None)
+        if memory is None:
+            return
+        snapshot_scoped = getattr(memory, "snapshot_scoped", None)
+        if not callable(snapshot_scoped):
+            return
+        scope = self.config.memory_scope or "project"
+        try:
+            snapshot = snapshot_scoped(
+                scope,
+                working_directory=self.config.working_directory,
+                limit=20,
+            )
+        except Exception:
+            return
+        if not snapshot:
+            return
+        query_terms = {part.lower() for part in query_text.split() if part.strip()}
+        matched_keys = sorted(
+            key
+            for key, value in snapshot.items()
+            if key.lower() in query_terms
+            or any(term in str(value).lower() for term in query_terms)
+        )
+        if not matched_keys:
+            return
+        self._record_event(
+            event_type="memory.hit",
+            payload={
+                "scope": scope,
+                "matched_keys": matched_keys,
+                "matched_count": len(matched_keys),
+            },
+        )
+
+    def _archive_session_to_history(self, session: Any) -> int:
+        """Archive persisted session into history storage."""
+        try:
+            from claude_code.services.history_manager import HistoryManager
+        except Exception:
+            return 0
+
+        history_manager = getattr(self, "history_manager", None)
+        if not isinstance(history_manager, HistoryManager):
+            return 0
+
+        messages = [
+            {
+                "id": message.id,
+                "role": message.role,
+                "content": message.content,
+                "timestamp": message.timestamp,
+                "tool_call_id": message.tool_call_id,
+                "tool_name": message.tool_name,
+                "metadata": message.metadata,
+            }
+            for message in getattr(session, "messages", [])
+        ]
+        if not messages:
+            return 0
+
+        session_metadata = getattr(session, "metadata", None)
+        working_directory = getattr(session_metadata, "working_directory", None)
+        model = getattr(session_metadata, "model", None)
+        session_id = getattr(session, "id", None)
+        if not session_id:
+            return 0
+
+        return history_manager.archive_session_messages(
+            session_id=session_id,
+            messages=messages,
+            working_directory=working_directory,
+            model=model,
+        )
+
+    async def _trigger_hook_event(
+        self,
+        event: HookEvent,
+        context: dict[str, Any],
+    ) -> list[Any]:
+        """Trigger hook event if runtime hooks manager is attached."""
+        hooks_manager = getattr(self, "hooks_manager", None)
+        if hooks_manager is None or not hasattr(hooks_manager, "trigger"):
+            return []
+
+        try:
+            return await hooks_manager.trigger(event, context)
+        except Exception:
+            return []
+
+    def _serialize_hook_results(self, results: list[Any]) -> list[dict[str, Any]]:
+        """Normalize hook trigger results for event journal payloads."""
+        serialized: list[dict[str, Any]] = []
+        for item in results:
+            to_dict = getattr(item, "to_dict", None)
+            if callable(to_dict):
+                try:
+                    data = to_dict()
+                    if isinstance(data, dict):
+                        serialized.append(data)
+                        continue
+                except Exception:
+                    pass
+
+            hook_name = getattr(item, "hook_name", None)
+            success = getattr(item, "success", None)
+            output = getattr(item, "output", None)
+            error = getattr(item, "error", None)
+            duration_ms = getattr(item, "duration_ms", None)
+            serialized.append(
+                {
+                    "hook_name": hook_name if hook_name is not None else "<unknown>",
+                    "success": bool(success) if success is not None else False,
+                    "output": output if output is not None else "",
+                    "error": error,
+                    "duration_ms": float(duration_ms) if duration_ms is not None else 0.0,
+                }
+            )
+        return serialized
+
+    def _record_hook_execution_event(
+        self,
+        *,
+        event: HookEvent,
+        hook_context: dict[str, Any],
+        results: list[Any],
+    ) -> None:
+        """Record hook execution outcomes into event journal."""
+        self._record_event(
+            event_type="hook.execution",
+            payload={
+                "hook_event": event.value,
+                "tool_name": hook_context.get("tool_name"),
+                "tool_use_id": hook_context.get("tool_use_id"),
+                "phase": hook_context.get("phase"),
+                "results": self._serialize_hook_results(results),
+            },
+        )
+
+    def _build_tool_hook_context(
+        self,
+        tool_use: ToolUse,
+        *,
+        phase: str,
+        duration_ms: Optional[float] = None,
+        result: Optional[ToolResult] = None,
+        error: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Build normalized hook context payload for tool lifecycle events."""
+        payload: dict[str, Any] = {
+            "source": "query_engine",
+            "phase": phase,
+            "conversation_id": self.conversation_id,
+            "session_id": self.config.session_id or self.conversation_id,
+            "working_directory": self.config.working_directory or os.getcwd(),
+            "model": self.config.model,
+            "tool_name": tool_use.name,
+            "tool_use_id": tool_use.id,
+            "tool_input": tool_use.input,
+        }
+        if duration_ms is not None:
+            payload["duration_ms"] = duration_ms
+        if result is not None:
+            payload["is_error"] = result.is_error
+            payload["tool_output"] = result.content
+        if error:
+            payload["error"] = error
+        return payload
+
+    async def _emit_tool_outcome_hooks(
+        self,
+        tool_use: ToolUse,
+        result: ToolResult,
+        duration_ms: float,
+        *,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Emit after_tool and on_error hooks for tool completion."""
+        after_context = self._build_tool_hook_context(
+            tool_use,
+            phase=HookEvent.AFTER_TOOL.value,
+            duration_ms=duration_ms,
+            result=result,
+        )
+        after_results = await self._trigger_hook_event(
+            HookEvent.AFTER_TOOL,
+            after_context,
+        )
+        self._record_hook_execution_event(
+            event=HookEvent.AFTER_TOOL,
+            hook_context=after_context,
+            results=after_results,
+        )
+
+        if result.is_error:
+            error_context = self._build_tool_hook_context(
+                tool_use,
+                phase=HookEvent.ON_ERROR.value,
+                duration_ms=duration_ms,
+                result=result,
+                error=error_message or str(result.content),
+            )
+            error_results = await self._trigger_hook_event(
+                HookEvent.ON_ERROR,
+                error_context,
+            )
+            self._record_hook_execution_event(
+                event=HookEvent.ON_ERROR,
+                hook_context=error_context,
+                results=error_results,
+            )
     
     async def _execute_tool(self, tool_use: ToolUse) -> ToolCallResult:
         """Execute a tool call."""
         start_time = time.time()
+        permission_checker = create_permission_checker(
+            mode=self.config.permission_mode,
+            always_allow=list(self.config.always_allow),
+            always_deny=list(self.config.always_deny),
+        )
+        permission_evaluation = permission_checker.evaluate(tool_use.name)
+        self._record_event(
+            event_type="permission.requested",
+            payload={
+                "tool_use_id": tool_use.id,
+                "tool_name": tool_use.name,
+                "tool_input": tool_use.input,
+                "permission_mode": self.config.permission_mode,
+            },
+        )
+        self._record_event(
+            event_type="permission.decided",
+            payload={
+                "tool_use_id": tool_use.id,
+                "tool_name": tool_use.name,
+                "allowed": permission_evaluation.allowed,
+                "decision_reason": permission_evaluation.reason,
+                "permission_mode": self.config.permission_mode,
+            },
+        )
+        self._record_event(
+            event_type="tool.started",
+            payload={
+                "tool_use_id": tool_use.id,
+                "tool_name": tool_use.name,
+                "tool_input": tool_use.input,
+            },
+        )
+        before_context = self._build_tool_hook_context(
+            tool_use,
+            phase=HookEvent.BEFORE_TOOL.value,
+        )
+        before_results = await self._trigger_hook_event(
+            HookEvent.BEFORE_TOOL,
+            before_context,
+        )
+        self._record_hook_execution_event(
+            event=HookEvent.BEFORE_TOOL,
+            hook_context=before_context,
+            results=before_results,
+        )
+
+        async def _finalize(result: ToolResult, error_message: Optional[str] = None) -> ToolCallResult:
+            duration_ms = (time.time() - start_time) * 1000
+            await self._emit_tool_outcome_hooks(
+                tool_use,
+                result,
+                duration_ms,
+                error_message=error_message,
+            )
+            event_type = "tool.failed" if result.is_error else "tool.completed"
+            self._record_event(
+                event_type=event_type,
+                payload={
+                    "tool_use_id": tool_use.id,
+                    "tool_name": tool_use.name,
+                    "duration_ms": duration_ms,
+                    "is_error": result.is_error,
+                    "tool_output": result.content,
+                    "error": error_message,
+                },
+            )
+            return ToolCallResult(
+                tool_use=tool_use,
+                result=result,
+                duration_ms=duration_ms,
+            )
         
         # Get tool from registry
         tool = self.tool_registry.get(tool_use.name)
         
         if not tool:
-            return ToolCallResult(
-                tool_use=tool_use,
-                result=ToolResult(
-                    content=f"Unknown tool: {tool_use.name}",
+            error_message = f"Unknown tool: {tool_use.name}"
+            return await _finalize(
+                ToolResult(
+                    content=error_message,
                     is_error=True,
                     tool_use_id=tool_use.id,
                 ),
-                duration_ms=0,
+                error_message=error_message,
             )
         
         # Create context
         context = ToolContext(
-            working_directory=os.getcwd(),
+            working_directory=self.config.working_directory or os.getcwd(),
             environment={},
             abort_signal=self.abort_event,
             permission_mode=self.config.permission_mode,
@@ -573,57 +988,60 @@ class QueryEngine:
             always_deny=list(self.config.always_deny),
             model=self.config.model,
             session_id=self.config.session_id or self.conversation_id,
+            memory_scope=self.config.memory_scope,
+            conversation_id=self.conversation_id,
+            api_provider=(
+                getattr(getattr(self.api_client, "config", None), "provider", None).value
+                if hasattr(getattr(getattr(self.api_client, "config", None), "provider", None), "value")
+                else str(getattr(getattr(self.api_client, "config", None), "provider", ""))
+            ),
+            task_manager=getattr(self, "task_manager", None),
+            tool_registry=self.tool_registry,
         )
-        
-        permission_checker = create_permission_checker(
-            mode=self.config.permission_mode,
-            always_allow=list(self.config.always_allow),
-            always_deny=list(self.config.always_deny),
-        )
-        if not permission_checker.can_execute(tool_use.name):
-            return ToolCallResult(
-                tool_use=tool_use,
-                result=ToolResult(
-                    content=f"Permission denied for tool: {tool_use.name} (mode={context.permission_mode})",
+
+        if not permission_evaluation.allowed:
+            error_message = (
+                f"Permission denied for tool: {tool_use.name} "
+                f"(mode={context.permission_mode})"
+            )
+            return await _finalize(
+                ToolResult(
+                    content=error_message,
                     is_error=True,
                     tool_use_id=tool_use.id,
                 ),
-                duration_ms=(time.time() - start_time) * 1000,
+                error_message=error_message,
             )
         
         try:
             # Validate input
             is_valid, error = tool.validate_input(tool_use.input)
             if not is_valid:
-                return ToolCallResult(
-                    tool_use=tool_use,
-                    result=ToolResult(
-                        content=f"Invalid input: {error}",
+                error_message = f"Invalid input: {error}"
+                return await _finalize(
+                    ToolResult(
+                        content=error_message,
                         is_error=True,
                         tool_use_id=tool_use.id,
                     ),
-                    duration_ms=time.time() - start_time,
+                    error_message=error_message,
                 )
             
             # Execute
             result = await tool.execute(tool_use.input, context)
             result.tool_use_id = tool_use.id
             
-            return ToolCallResult(
-                tool_use=tool_use,
-                result=result,
-                duration_ms=(time.time() - start_time) * 1000,
-            )
+            return await _finalize(result)
             
         except Exception as e:
-            return ToolCallResult(
-                tool_use=tool_use,
-                result=ToolResult(
-                    content=f"Tool execution error: {str(e)}",
+            error_message = f"Tool execution error: {str(e)}"
+            return await _finalize(
+                ToolResult(
+                    content=error_message,
                     is_error=True,
                     tool_use_id=tool_use.id,
                 ),
-                duration_ms=(time.time() - start_time) * 1000,
+                error_message=error_message,
             )
     
     def interrupt(self):
@@ -673,9 +1091,23 @@ class QueryEngine:
         """Get configured hooks."""
         return getattr(self, '_hooks', [])
     
-    async def load_skill(self, skill_name: str):
+    async def load_skill(self, skill_name: str) -> dict[str, Any]:
         """Load a skill by name."""
-        pass  # Placeholder - skills loading not yet implemented
+        from claude_code.skills.registry import get_skill_registry, load_all_skills
+
+        load_all_skills(
+            project_dir=self.config.working_directory or os.getcwd(),
+            include_bundled=True,
+        )
+        registry = get_skill_registry()
+        skill = registry.get(skill_name)
+        if skill is None:
+            raise ValueError(f"Skill not found: {skill_name}")
+        return {
+            "status": "loaded",
+            "skill": skill_name,
+            "source": str(skill.source.value if hasattr(skill.source, "value") else skill.source),
+        }
     
     def set_effort(self, level: str):
         """Set effort level (low, medium, high)."""
@@ -740,5 +1172,49 @@ class QueryEngine:
     
     async def resume_session(self, session_id: Optional[str] = None) -> bool:
         """Resume a previous session."""
-        pass  # Placeholder - session loading not yet implemented
+        from claude_code.engine.session import SessionManager
+
+        manager = getattr(self, "session_manager", None)
+        if not isinstance(manager, SessionManager):
+            manager = SessionManager()
+            self.session_manager = manager
+
+        current_session = manager.get_current_session()
+        target_session_id = session_id
+        if target_session_id is None:
+            sessions = manager.list_sessions()
+            if not sessions:
+                return False
+            target_session_id = sessions[0].id
+
+        if (
+            current_session is not None
+            and target_session_id is not None
+            and current_session.id != target_session_id
+        ):
+            self._archive_session_to_history(current_session)
+
+        session = manager.load_session(target_session_id)
+        if session is None:
+            return False
+
+        restored: list[Message] = []
+        for record in session.messages:
+            restored.append(
+                Message(
+                    id=record.id,
+                    role=record.role,
+                    content=record.content,
+                    timestamp=record.timestamp,
+                    tool_call_id=record.tool_call_id,
+                    tool_name=record.tool_name,
+                )
+            )
+
+        self.messages = restored
+        self.tool_results = []
+        self.conversation_id = session.id
+        self.config.session_id = session.id
+        if session.metadata.working_directory:
+            self.config.working_directory = session.metadata.working_directory
         return True

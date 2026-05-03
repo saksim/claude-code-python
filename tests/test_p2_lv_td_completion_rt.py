@@ -1,0 +1,228 @@
+"""Contract tests for P2-72 Linux CI workflow Linux validation terminal dispatch completion gate."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+
+def _load_ci_workflow_linux_validation_terminal_dispatch_completion_gate_module():
+    script_path = (
+        Path("scripts")
+        / "run_p2_lv_td_completion_gate.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "p2_linux_ci_workflow_linux_validation_terminal_dispatch_completion_gate",
+        script_path,
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _sample_linux_validation_terminal_dispatch_trace_payload() -> dict:
+    return {
+        "generated_at": "2026-05-02T00:00:00+00:00",
+        "source_linux_validation_terminal_dispatch_execution_report": "/tmp/ci_workflow_linux_validation_terminal_dispatch_execution.json",
+        "source_linux_validation_terminal_dispatch_report": "/tmp/ci_workflow_linux_validation_terminal_dispatch.json",
+        "linux_validation_terminal_dispatch_execution_status": "dispatched",
+        "linux_validation_terminal_dispatch_execution_decision": "dispatch_linux_validation_terminal",
+        "linux_validation_terminal_dispatch_execution_exit_code": 0,
+        "linux_validation_terminal_should_dispatch": True,
+        "linux_validation_terminal_dispatch_attempted": True,
+        "linux_validation_terminal_dispatch_trace_status": "run_tracking_ready",
+        "linux_validation_terminal_dispatch_trace_exit_code": 0,
+        "linux_validation_terminal_should_poll_workflow_run": True,
+        "linux_validation_terminal_run_id": 9988776655,
+        "linux_validation_terminal_run_url": "https://github.com/acme/demo/actions/runs/9988776655",
+        "linux_validation_terminal_repo_owner": "acme",
+        "linux_validation_terminal_repo_name": "demo",
+        "linux_validation_terminal_poll_command": (
+            "gh run view 9988776655 --json "
+            "databaseId,status,conclusion,url,workflowName,createdAt,updatedAt --repo acme/demo"
+        ),
+        "linux_validation_terminal_poll_command_parts": [
+            "gh",
+            "run",
+            "view",
+            "9988776655",
+            "--json",
+            "databaseId,status,conclusion,url,workflowName,createdAt,updatedAt",
+            "--repo",
+            "acme/demo",
+        ],
+        "linux_validation_terminal_poll_attempted": False,
+        "linux_validation_terminal_poll_returncode": None,
+        "linux_validation_terminal_poll_status": "",
+        "linux_validation_terminal_poll_conclusion": "",
+        "linux_validation_terminal_poll_url": "https://github.com/acme/demo/actions/runs/9988776655",
+        "linux_validation_terminal_poll_error_type": "",
+        "linux_validation_terminal_poll_error_message": "",
+        "linux_validation_terminal_poll_stdout_tail": "",
+        "linux_validation_terminal_poll_stderr_tail": "",
+        "release_run_id": 9988776655,
+        "release_run_url": "https://github.com/acme/demo/actions/runs/9988776655",
+        "follow_up_queue_url": "",
+        "reason_codes": ["linux_validation_terminal_dispatch_run_tracking_ready"],
+        "structural_issues": [],
+        "missing_artifacts": [],
+    }
+
+
+def _success_poll_result() -> dict:
+    return {
+        "returncode": 0,
+        "stdout_tail": (
+            '{"status":"completed","conclusion":"success",'
+            '"url":"https://github.com/acme/demo/actions/runs/9988776655"}'
+        ),
+        "stderr_tail": "",
+        "payload": {
+            "status": "completed",
+            "conclusion": "success",
+            "url": "https://github.com/acme/demo/actions/runs/9988776655",
+        },
+        "error_type": "",
+        "error_message": "",
+    }
+
+
+def test_build_linux_validation_terminal_dispatch_completion_payload_reaches_success(tmp_path: Path):
+    gate = _load_ci_workflow_linux_validation_terminal_dispatch_completion_gate_module()
+    payload = _sample_linux_validation_terminal_dispatch_trace_payload()
+    report_path = tmp_path / "ci_workflow_linux_validation_terminal_dispatch_trace.json"
+    report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = gate.load_linux_validation_terminal_dispatch_trace_report(report_path)
+    completion_payload = gate.build_linux_validation_terminal_dispatch_completion_payload(
+        report,
+        source_path=report_path.resolve(),
+        project_root=tmp_path,
+        poll_interval_seconds=1,
+        max_polls=3,
+        poll_timeout_seconds=30,
+        dry_run=False,
+        allow_in_progress=False,
+        poll_executor=lambda command_parts, cwd, timeout_seconds: _success_poll_result(),
+        sleep_fn=lambda seconds: None,
+    )
+
+    assert completion_payload["linux_validation_terminal_dispatch_completion_status"] == "run_completed_success"
+    assert completion_payload["linux_validation_terminal_dispatch_completion_exit_code"] == 0
+    assert completion_payload["poll_attempted"] is True
+    assert completion_payload["poll_iterations"] == 1
+    assert completion_payload["poll_status"] == "completed"
+    assert completion_payload["poll_conclusion"] == "success"
+    assert completion_payload["reason_codes"] == ["linux_validation_terminal_dispatch_run_completed_success"]
+
+
+def test_build_linux_validation_terminal_dispatch_completion_payload_timeout_without_allow_in_progress(tmp_path: Path):
+    gate = _load_ci_workflow_linux_validation_terminal_dispatch_completion_gate_module()
+    payload = _sample_linux_validation_terminal_dispatch_trace_payload()
+    report_path = tmp_path / "ci_workflow_linux_validation_terminal_dispatch_trace.json"
+    report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = gate.load_linux_validation_terminal_dispatch_trace_report(report_path)
+
+    def _in_progress_result(command_parts, cwd, timeout_seconds):
+        return {
+            "returncode": 0,
+            "stdout_tail": '{"status":"in_progress","conclusion":null}',
+            "stderr_tail": "",
+            "payload": {"status": "in_progress", "conclusion": None},
+            "error_type": "",
+            "error_message": "",
+        }
+
+    completion_payload = gate.build_linux_validation_terminal_dispatch_completion_payload(
+        report,
+        source_path=report_path.resolve(),
+        project_root=tmp_path,
+        poll_interval_seconds=1,
+        max_polls=2,
+        poll_timeout_seconds=30,
+        dry_run=False,
+        allow_in_progress=False,
+        poll_executor=_in_progress_result,
+        sleep_fn=lambda seconds: None,
+    )
+
+    assert completion_payload["linux_validation_terminal_dispatch_completion_status"] == "run_await_timeout"
+    assert completion_payload["linux_validation_terminal_dispatch_completion_exit_code"] == 1
+    assert completion_payload["poll_attempted"] is True
+    assert completion_payload["poll_iterations"] == 2
+    assert "linux_validation_terminal_dispatch_run_await_timeout" in completion_payload["reason_codes"]
+
+
+def test_load_linux_validation_terminal_dispatch_trace_report_rejects_command_contract_mismatch(tmp_path: Path):
+    gate = _load_ci_workflow_linux_validation_terminal_dispatch_completion_gate_module()
+    payload = _sample_linux_validation_terminal_dispatch_trace_payload()
+    payload["linux_validation_terminal_poll_command_parts"] = [
+        "gh",
+        "run",
+        "view",
+        "9988776655",
+        "--json",
+        "databaseId,status",
+    ]
+    report_path = tmp_path / "ci_workflow_linux_validation_terminal_dispatch_trace_bad.json"
+    report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    try:
+        gate.load_linux_validation_terminal_dispatch_trace_report(report_path)
+        raised = False
+    except ValueError:
+        raised = True
+
+    assert raised
+
+
+def test_build_github_output_values_contract(tmp_path: Path):
+    gate = _load_ci_workflow_linux_validation_terminal_dispatch_completion_gate_module()
+    payload = _sample_linux_validation_terminal_dispatch_trace_payload()
+    payload["linux_validation_terminal_dispatch_trace_status"] = "run_completed_failure"
+    payload["linux_validation_terminal_dispatch_trace_exit_code"] = 1
+    payload["linux_validation_terminal_should_poll_workflow_run"] = False
+    payload["linux_validation_terminal_run_id"] = None
+    payload["linux_validation_terminal_poll_command"] = ""
+    payload["linux_validation_terminal_poll_command_parts"] = []
+    payload["reason_codes"] = ["linux_validation_terminal_dispatch_run_completed_with_failure"]
+    report_path = tmp_path / "ci_workflow_linux_validation_terminal_dispatch_trace_terminal.json"
+    report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = gate.load_linux_validation_terminal_dispatch_trace_report(report_path)
+    completion_payload = gate.build_linux_validation_terminal_dispatch_completion_payload(
+        report,
+        source_path=report_path.resolve(),
+        project_root=tmp_path,
+        poll_interval_seconds=1,
+        max_polls=1,
+        poll_timeout_seconds=30,
+        dry_run=False,
+        allow_in_progress=False,
+        sleep_fn=lambda seconds: None,
+    )
+    outputs = gate.build_github_output_values(
+        completion_payload,
+        output_json=Path(
+            ".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.json"
+        ),
+        output_markdown=Path(
+            ".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.md"
+        ),
+    )
+
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_status"] == "run_completed_failure"
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_exit_code"] == "1"
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_should_poll"] == "false"
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_poll_attempted"] == "false"
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_run_id"] == ""
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_report_json"].endswith(
+        "ci_workflow_linux_validation_terminal_dispatch_completion.json"
+    )
+    assert outputs["workflow_linux_validation_terminal_dispatch_completion_report_markdown"].endswith(
+        "ci_workflow_linux_validation_terminal_dispatch_completion.md"
+    )

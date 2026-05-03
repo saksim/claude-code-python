@@ -5,6 +5,7 @@ Following TOP Python Dev standards with proper type hints and __slots__.
 """
 
 import asyncio
+import inspect
 import signal
 import sys
 from dataclasses import dataclass
@@ -55,10 +56,7 @@ from claude_code.utils.request_context import (
 )
 
 # Import logger
-from claude_code.utils.logging_system import (
-    get_logger,
-    configure_logging,
-)
+from claude_code.utils.logging import get_logger, set_log_level, setup_logging
 
 
 class AppPhase(Enum):
@@ -175,7 +173,8 @@ class Application:
         self._logger.info("Initializing %s v%s", self.config.service_name, self.config.version)
         
         # 1. Setup logging
-        configure_logging(self.config.log_level)
+        setup_logging(verbose=self.config.log_level.upper() == "DEBUG")
+        set_log_level(self.config.log_level.lower())
         
         # 2. Initialize DI Container
         self._container = ServiceContainer()
@@ -200,9 +199,6 @@ class Application:
         self._shutdown_manager = ShutdownManager(shutdown_config)
         await self._shutdown_manager.start()
         
-        # 6. Register signal handlers
-        self._register_signal_handlers()
-        
         self._phase = AppPhase.RUNNING
         self._running = True
         self._logger.info("Application initialized successfully")
@@ -218,6 +214,8 @@ class Application:
         
         # Run cleanup callbacks
         for name, cleanup in self._services.items():
+            if cleanup is None:
+                continue
             try:
                 if asyncio.iscoroutinefunction(cleanup):
                     await cleanup()
@@ -277,6 +275,7 @@ class Application:
         self,
         name: str,
         factory: Callable[..., Any],
+        service_type: Optional[type] = None,
         cleanup: Optional[Callable[[], Any]] = None,
     ) -> None:
         """Register a service factory.
@@ -284,11 +283,22 @@ class Application:
         Args:
             name: Service name.
             factory: Service factory function.
+            service_type: Service type used for DI resolution.
             cleanup: Optional cleanup callback.
         """
         self._services[name] = cleanup
+        resolved_type = service_type
+        if resolved_type is None:
+            signature = inspect.signature(factory)
+            annotation = signature.return_annotation
+            if annotation is not inspect.Signature.empty and isinstance(annotation, type):
+                resolved_type = annotation
+        if resolved_type is None:
+            raise ValueError(
+                "register_factory requires service_type when factory has no concrete return annotation"
+            )
         self._container.register_factory(
-            type(next(iter([factory()]))),  # Get type from factory result
+            resolved_type,
             factory,
             ServiceLifecycle.SINGLETON,
         )

@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 
 from claude_code.tasks.queue import InMemoryTaskQueue, QueueItem
-from claude_code.tasks.repository import create_file_runtime_task_repository
+from claude_code.tasks.repository import (
+    RUNTIME_TASKS_SCHEMA_KEY,
+    RUNTIME_TASKS_SCHEMA_VERSION,
+    create_file_runtime_task_repository,
+    create_sqlite_runtime_task_repository,
+)
 from claude_code.tasks.types import BashTask, TaskResult, TaskStatus
 
 
@@ -77,3 +82,43 @@ def test_runtime_repository_contract_upsert_get_delete():
 
         repo.delete_task(task.id)
         assert repo.get_task_record(task.id) is None
+
+
+def test_sqlite_runtime_repository_contract_upsert_get_delete():
+    with _temp_runtime_workdir() as workdir:
+        repo = create_sqlite_runtime_task_repository(workdir)
+
+        task = BashTask(
+            id="task-sqlite-123",
+            command="echo sqlite",
+            status=TaskStatus.COMPLETED,
+        )
+        task.result = TaskResult(code=0, stdout="ok-sqlite", stderr="")
+
+        repo.upsert_task(task)
+        record = repo.get_task_record(task.id)
+        assert record is not None
+        assert record["id"] == "task-sqlite-123"
+        assert record["status"] == "completed"
+        assert record["result"]["stdout"] == "ok-sqlite"
+
+        repo.delete_task(task.id)
+        assert repo.get_task_record(task.id) is None
+
+
+def test_sqlite_runtime_repository_schema_version_guard(tmp_path: Path):
+    workdir = tmp_path / "runtime-schema-guard"
+    workdir.mkdir(parents=True, exist_ok=True)
+    repo = create_sqlite_runtime_task_repository(workdir)
+    db_path = repo.db_path
+
+    import sqlite3
+
+    with sqlite3.connect(db_path, timeout=5.0) as conn:
+        conn.execute(
+            "UPDATE runtime_tasks_metadata SET value = ? WHERE key = ?",
+            (str(RUNTIME_TASKS_SCHEMA_VERSION + 1), RUNTIME_TASKS_SCHEMA_KEY),
+        )
+
+    with pytest.raises(RuntimeError, match="newer than this binary"):
+        create_sqlite_runtime_task_repository(workdir)

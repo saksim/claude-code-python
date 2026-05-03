@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STORAGE_DIR = Path.home() / ".claude-code-python" / "sessions"
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
+SESSION_STORE_SCHEMA_VERSION = 1
+SESSION_STORE_SCHEMA_KEY = "session_store_schema_version"
 
 
 @dataclass(slots=True)
@@ -248,6 +251,151 @@ class SessionStore:
         return False
 
 
+class SQLiteSessionStore(SessionStore):
+    """SQLite-backed session storage."""
+
+    def __init__(self, sqlite_db_path: Path | str) -> None:
+        self._db_path = Path(sqlite_db_path)
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._initialize_schema()
+
+    @property
+    def storage_dir(self) -> Path:
+        return self._db_path.parent
+
+    def save_session(self, session: "Session") -> None:
+        metadata_json = json.dumps(session.metadata.to_dict(), ensure_ascii=False)
+        messages_json = json.dumps([msg.to_dict() for msg in session.messages], ensure_ascii=False)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (id, metadata_json, messages_json, last_active)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    metadata_json = excluded.metadata_json,
+                    messages_json = excluded.messages_json,
+                    last_active = excluded.last_active
+                """,
+                (
+                    session.id,
+                    metadata_json,
+                    messages_json,
+                    float(session.metadata.last_active),
+                ),
+            )
+
+    def load_session(self, session_id: str) -> Session | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT metadata_json, messages_json FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            metadata_payload = json.loads(row[0])
+            messages_payload = json.loads(row[1])
+            metadata = SessionMetadata.from_dict(metadata_payload)
+            messages = [MessageRecord.from_dict(item) for item in messages_payload]
+            return Session(metadata=metadata, messages=messages)
+        except Exception as e:
+            logger.error(f"Error loading session from sqlite: {e}")
+            return None
+
+    def list_sessions(self) -> list[SessionMetadata]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT metadata_json FROM sessions ORDER BY last_active DESC"
+            ).fetchall()
+        sessions: list[SessionMetadata] = []
+        for row in rows:
+            try:
+                payload = json.loads(row[0])
+                sessions.append(SessionMetadata.from_dict(payload))
+            except Exception:
+                continue
+        return sessions
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM sessions WHERE id = ?",
+                (session_id,),
+            )
+        return cursor.rowcount > 0
+
+    def _initialize_schema(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS session_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    metadata_json TEXT NOT NULL,
+                    messages_json TEXT NOT NULL,
+                    last_active REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions (last_active DESC)"
+            )
+
+            version = self._read_schema_version(conn)
+            if version is None:
+                self._write_schema_version(conn, SESSION_STORE_SCHEMA_VERSION)
+            elif version > SESSION_STORE_SCHEMA_VERSION:
+                raise RuntimeError(
+                    "Session SQLite schema is newer than this binary: "
+                    f"{version} > {SESSION_STORE_SCHEMA_VERSION}"
+                )
+            elif version < SESSION_STORE_SCHEMA_VERSION:
+                self._migrate_schema(conn, version, SESSION_STORE_SCHEMA_VERSION)
+                self._write_schema_version(conn, SESSION_STORE_SCHEMA_VERSION)
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self._db_path, timeout=5.0)
+
+    @staticmethod
+    def _read_schema_version(conn: sqlite3.Connection) -> int | None:
+        row = conn.execute(
+            "SELECT value FROM session_metadata WHERE key = ?",
+            (SESSION_STORE_SCHEMA_KEY,),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            return int(row[0])
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _write_schema_version(conn: sqlite3.Connection, version: int) -> None:
+        conn.execute(
+            """
+            INSERT INTO session_metadata (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (SESSION_STORE_SCHEMA_KEY, str(version)),
+        )
+
+    @staticmethod
+    def _migrate_schema(conn: sqlite3.Connection, from_version: int, to_version: int) -> None:
+        if from_version < 1:
+            raise RuntimeError(f"Unsupported session schema version: {from_version}")
+        if to_version != SESSION_STORE_SCHEMA_VERSION:
+            raise RuntimeError(f"Unsupported target session schema version: {to_version}")
+        # Schema v1 is current. Future migrations will be appended here.
+
+
 class Session:
     """A conversation session.
 
@@ -328,12 +476,18 @@ class Session:
         )
         self._messages.append(msg)
         self._metadata.message_count += 1
+        if msg.tool_call_id or msg.tool_name:
+            self._metadata.tool_call_count += 1
         self._metadata.last_active = time.time()
 
         if self._store:
             self._store.save_session(self)
 
         return msg
+
+    def has_message(self, message_id: str) -> bool:
+        """Check whether a message with the given ID already exists."""
+        return any(message.id == message_id for message in self._messages)
 
     def add_user_message(self, content: str) -> MessageRecord:
         """Add a user message.
@@ -449,6 +603,15 @@ class SessionManager:
         self._store = SessionStore(storage_dir)
         self._current_session: Session | None = None
         self._sessions: dict[str, Session] = {}
+
+    @classmethod
+    def from_store(cls, store: SessionStore) -> "SessionManager":
+        """Create session manager with explicit session store."""
+        manager = cls.__new__(cls)
+        manager._store = store
+        manager._current_session = None
+        manager._sessions = {}
+        return manager
 
     @property
     def current_session(self) -> Session | None:

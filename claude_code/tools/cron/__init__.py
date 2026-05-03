@@ -10,16 +10,21 @@ Following TOP Python Dev standards:
 
 from __future__ import annotations
 
-import os
-import json
-import subprocess
 from typing import Any, Optional
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from claude_code.tools.base import Tool, ToolContext, ToolResult, ToolCallback
-from claude_code.tools.cron.create import CronCreateTool
+from claude_code.tools.cron.create import (
+    CronCreateTool,
+    _SESSION_ONLY_TASKS,
+    _load_persisted_tasks,
+    _save_persisted_tasks,
+)
+
+
+_SCHEDULE_FILE_NAME = "scheduled_tasks.json"
 
 
 class ScheduleCronTool(Tool):
@@ -102,7 +107,7 @@ class ScheduleCronTool(Tool):
         command = input_data.get("command", "")
         schedule = input_data.get("schedule", "")
         name = input_data.get("name", str(uuid4())[:8])
-        enabled = input_data.get("enabled", True)
+        enabled = bool(input_data.get("enabled", True))
         
         if not command or not schedule:
             return ToolResult(
@@ -110,23 +115,20 @@ class ScheduleCronTool(Tool):
                 is_error=True
             )
         
-        schedule_file = Path(context.working_directory) / ".claude" / "schedules.json"
-        schedule_file.parent.mkdir(exist_ok=True)
-        
-        schedules = {}
-        if schedule_file.exists():
-            with open(schedule_file) as f:
-                schedules = json.load(f)
-        
+        schedule_file = Path(context.working_directory) / ".claude" / _SCHEDULE_FILE_NAME
+        schedules = _load_persisted_tasks(schedule_file)
         schedules[name] = {
-            "command": command,
-            "schedule": schedule,
-            "enabled": enabled,
+            "cron": schedule,
+            "prompt": command,
+            "recurring": True,
+            "durable": True,
+            "status": "active" if enabled else "disabled",
             "created_at": datetime.now().isoformat(),
+            "last_run": None,
+            "source": "schedule_cron",
+            "name": name,
         }
-        
-        with open(schedule_file, "w") as f:
-            json.dump(schedules, f, indent=2)
+        _save_persisted_tasks(schedule_file, schedules)
         
         return ToolResult(content=f"""# Schedule Created
 
@@ -134,6 +136,7 @@ class ScheduleCronTool(Tool):
 **Command:** {command}
 **Schedule:** {schedule}
 **Enabled:** {enabled}
+**Stored In:** .claude/{_SCHEDULE_FILE_NAME}
 
 Use /schedule list to see all schedules.""")
 
@@ -192,24 +195,33 @@ class CronListTool(Tool):
         Returns:
             ToolResult with list of schedules.
         """
-        schedule_file = Path(context.working_directory) / ".claude" / "schedules.json"
-        
-        if not schedule_file.exists():
-            return ToolResult(content="No schedules configured")
-        
-        with open(schedule_file) as f:
-            schedules = json.load(f)
-        
-        if not schedules:
+        schedule_file = Path(context.working_directory) / ".claude" / _SCHEDULE_FILE_NAME
+        persisted = _load_persisted_tasks(schedule_file)
+        if not persisted and not _SESSION_ONLY_TASKS:
             return ToolResult(content="No schedules configured")
         
         lines = ["# Scheduled Tasks\n"]
-        
-        for name, config in schedules.items():
+
+        for name, config in persisted.items():
+            cron = str(config.get("cron", config.get("schedule", "")))
+            prompt = str(config.get("prompt", config.get("command", "")))
+            enabled = str(config.get("status", "active")).lower() == "active"
             lines.append(f"\n## {name}")
-            lines.append(f"Command: {config['command']}")
-            lines.append(f"Schedule: {config['schedule']}")
-            lines.append(f"Enabled: {config['enabled']}")
+            lines.append(f"Prompt/Command: {prompt}")
+            lines.append(f"Cron: {cron}")
+            lines.append(f"Enabled: {enabled}")
+            lines.append("Durable: True")
+            lines.append(f"Created: {config.get('created_at', 'unknown')}")
+
+        for name, config in _SESSION_ONLY_TASKS.items():
+            cron = str(config.get("cron", ""))
+            prompt = str(config.get("prompt", ""))
+            enabled = str(config.get("status", "active")).lower() == "active"
+            lines.append(f"\n## {name}")
+            lines.append(f"Prompt/Command: {prompt}")
+            lines.append(f"Cron: {cron}")
+            lines.append(f"Enabled: {enabled}")
+            lines.append("Durable: False (session-only)")
             lines.append(f"Created: {config.get('created_at', 'unknown')}")
         
         return ToolResult(content="\n".join(lines))
@@ -282,22 +294,21 @@ class CronDeleteTool(Tool):
         if not name:
             return ToolResult(content="Error: name is required", is_error=True)
         
-        schedule_file = Path(context.working_directory) / ".claude" / "schedules.json"
-        
-        if not schedule_file.exists():
+        schedule_file = Path(context.working_directory) / ".claude" / _SCHEDULE_FILE_NAME
+        schedules = _load_persisted_tasks(schedule_file)
+
+        deleted = False
+        if name in schedules:
+            del schedules[name]
+            _save_persisted_tasks(schedule_file, schedules)
+            deleted = True
+        if name in _SESSION_ONLY_TASKS:
+            del _SESSION_ONLY_TASKS[name]
+            deleted = True
+
+        if not deleted:
             return ToolResult(content=f"Schedule not found: {name}", is_error=True)
-        
-        with open(schedule_file) as f:
-            schedules = json.load(f)
-        
-        if name not in schedules:
-            return ToolResult(content=f"Schedule not found: {name}", is_error=True)
-        
-        del schedules[name]
-        
-        with open(schedule_file, "w") as f:
-            json.dump(schedules, f, indent=2)
-        
+
         return ToolResult(content=f"Deleted schedule: {name}")
 
 

@@ -153,3 +153,6 @@ Thumbs.db
 sessions/
 cache/
 .claude/perf_tmp/
+tests/.tmp_context/
+tests/.tmp_plugins/
+tests/.tmp_*/

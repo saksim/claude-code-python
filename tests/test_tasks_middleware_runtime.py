@@ -19,6 +19,7 @@ from claude_code.tasks.manager import TaskManager
 from claude_code.tasks.types import TaskResult, TaskStatus
 from claude_code.tools.base import ToolContext
 from claude_code.tools.control import TaskControlListTool, TaskOutputTool, TaskStopTool
+from claude_code.tools.cron import CronDeleteTool, CronListTool, ScheduleCronTool
 from claude_code.tools.cron.create import CronCreateTool, _SESSION_ONLY_TASKS
 from claude_code.tools.workflow import TaskListTool, TaskUpdateTool
 from claude_code.utils.task_store import load_tasks, mutate_tasks
@@ -146,6 +147,32 @@ async def test_cron_create_honors_durable_flag():
         assert schedule_file.exists()
         persisted = json.loads(schedule_file.read_text(encoding="utf-8"))
         assert len(persisted) == 1
+
+
+@pytest.mark.asyncio
+async def test_schedule_tools_share_scheduled_tasks_storage():
+    with _temp_workdir() as workdir:
+        _SESSION_ONLY_TASKS.clear()
+        context = _tool_context(workdir)
+        schedule_file = workdir / ".claude" / "scheduled_tasks.json"
+
+        create_result = await ScheduleCronTool().execute(
+            {"command": "echo hi", "schedule": "0 * * * *", "name": "hourly"},
+            context,
+        )
+        assert not create_result.is_error
+        assert schedule_file.exists()
+
+        list_result = await CronListTool().execute({}, context)
+        assert not list_result.is_error
+        assert "hourly" in str(list_result.content)
+        assert "Durable: True" in str(list_result.content)
+
+        delete_result = await CronDeleteTool().execute({"name": "hourly"}, context)
+        assert not delete_result.is_error
+
+        payload = json.loads(schedule_file.read_text(encoding="utf-8"))
+        assert "hourly" not in payload
 
 
 @pytest.mark.asyncio

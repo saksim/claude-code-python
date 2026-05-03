@@ -13,7 +13,10 @@ import pytest
 
 from claude_code.tasks.manager import TaskManager, TaskStateTransitionError
 from claude_code.tasks.queue import InMemoryTaskQueue
-from claude_code.tasks.repository import create_file_runtime_task_repository
+from claude_code.tasks.repository import (
+    create_file_runtime_task_repository,
+    create_sqlite_runtime_task_repository,
+)
 from claude_code.tasks.types import TaskResult, TaskStatus, BashTask, create_task_from_dict
 
 
@@ -201,6 +204,36 @@ async def test_runtime_repository_persists_task_lifecycle():
         assert runtime_repo.get_task_record(task.id) is None
 
 
+@pytest.mark.asyncio
+async def test_sqlite_runtime_repository_persists_task_lifecycle():
+    with _temp_runtime_workdir() as workdir:
+        runtime_repo = create_sqlite_runtime_task_repository(workdir)
+        manager = TaskManager(
+            task_queue=InMemoryTaskQueue(),
+            runtime_repository=runtime_repo,
+        )
+
+        task = await manager.create_bash_task(command="echo persist sqlite")
+        pending_record = runtime_repo.get_task_record(task.id)
+        assert pending_record is not None
+        assert pending_record["status"] == "pending"
+
+        async def _ok_executor(_task):
+            return TaskResult(code=0, stdout="persisted-sqlite")
+
+        await manager.start_task(task.id, executor=_ok_executor)
+        await manager.wait_for_task(task.id, timeout=1.0)
+
+        completed_record = runtime_repo.get_task_record(task.id)
+        assert completed_record is not None
+        assert completed_record["status"] == "completed"
+        assert completed_record["result"]["stdout"] == "persisted-sqlite"
+
+        cleared = manager.clear_completed()
+        assert cleared == 1
+        assert runtime_repo.get_task_record(task.id) is None
+
+
 def test_create_task_from_dict_handles_bash_description():
     payload = {
         "id": "task-1",
@@ -227,6 +260,40 @@ async def test_manager_recovers_inflight_task_as_failed():
         task = await seed_manager.create_bash_task(
             command="echo recover me",
             idempotency_key="recover-key",
+        )
+        task.status = TaskStatus.RUNNING
+        task.started_at = datetime.now()
+        runtime_repo.upsert_task(task)
+
+        recovered_manager = TaskManager(
+            task_queue=InMemoryTaskQueue(),
+            runtime_repository=runtime_repo,
+        )
+
+        recovered = recovered_manager.get_task(task.id)
+        assert recovered is not None
+        assert recovered.status == TaskStatus.FAILED
+        assert "recovered after process restart" in (recovered.error or "")
+        assert recovered_manager.get_stats()["recovered"] >= 1
+        assert recovered_manager.get_stats()["idempotency_keys"] == 1
+
+        record = runtime_repo.get_task_record(task.id)
+        assert record is not None
+        assert record["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_manager_recovers_inflight_task_as_failed_with_sqlite_repo():
+    with _temp_runtime_workdir() as workdir:
+        runtime_repo = create_sqlite_runtime_task_repository(workdir)
+        seed_manager = TaskManager(
+            task_queue=InMemoryTaskQueue(),
+            runtime_repository=runtime_repo,
+        )
+
+        task = await seed_manager.create_bash_task(
+            command="echo recover sqlite",
+            idempotency_key="recover-sqlite-key",
         )
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.now()

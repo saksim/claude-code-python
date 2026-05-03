@@ -87,6 +87,11 @@ class ToolContext:
     always_deny: list[str] = field(default_factory=list)
     model: Optional[str] = None
     session_id: Optional[str] = None
+    memory_scope: Optional[str] = None
+    conversation_id: Optional[str] = None
+    api_provider: Optional[str] = None
+    task_manager: Any = None
+    tool_registry: Optional["ToolRegistry"] = None
 
     _allow_set: Optional[frozenset[str]] = field(default=None, repr=False)
     _deny_set: Optional[frozenset[str]] = field(default=None, repr=False)

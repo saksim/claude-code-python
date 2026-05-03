@@ -24,7 +24,9 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from claude_code.commands.base import CommandContext, CommandResult
 from claude_code.commands.registry import get_all_commands
+from claude_code.services.hooks_manager import HookEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,18 +239,189 @@ A Python implementation of an AI programming assistant.
             True if command was handled, False otherwise.
         """
         parts = command.split(maxsplit=1)
-        cmd = parts[0].lower()
+        raw_cmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
+        cmd = raw_cmd[1:] if raw_cmd.startswith("/") else raw_cmd
 
-        handler = self._commands.get(cmd)
+        handler = self._resolve_command_handler(cmd)
         if handler:
-            return await handler.execute(self, args)
+            context = self._build_command_context()
+            await self._trigger_command_hook(
+                HookEvent.BEFORE_COMMAND,
+                self._build_command_hook_context(
+                    command_name=cmd,
+                    command_args=args,
+                    phase=HookEvent.BEFORE_COMMAND.value,
+                ),
+            )
+            try:
+                result = await handler.execute(args, context)
+            except Exception as exc:
+                error_message = f"Command '/{cmd}' failed: {exc}"
+                await self._trigger_command_hook(
+                    HookEvent.ON_ERROR,
+                    self._build_command_hook_context(
+                        command_name=cmd,
+                        command_args=args,
+                        phase=HookEvent.ON_ERROR.value,
+                        error=error_message,
+                    ),
+                )
+                self.print_error(error_message)
+                return True
 
-        if cmd.startswith("/"):
-            self.print_error(f"Unknown command: {cmd}")
+            await self._trigger_command_hook(
+                HookEvent.AFTER_COMMAND,
+                self._build_command_hook_context(
+                    command_name=cmd,
+                    command_args=args,
+                    phase=HookEvent.AFTER_COMMAND.value,
+                    result=result,
+                ),
+            )
+            if not result.success:
+                await self._trigger_command_hook(
+                    HookEvent.ON_ERROR,
+                    self._build_command_hook_context(
+                        command_name=cmd,
+                        command_args=args,
+                        phase=HookEvent.ON_ERROR.value,
+                        result=result,
+                        error=result.error or "Command failed",
+                    ),
+                )
+            self._render_command_result(result)
+            return True
+
+        if raw_cmd.startswith("/"):
+            await self._trigger_command_hook(
+                HookEvent.ON_ERROR,
+                self._build_command_hook_context(
+                    command_name=cmd,
+                    command_args=args,
+                    phase=HookEvent.ON_ERROR.value,
+                    error=f"Unknown command: /{cmd}",
+                ),
+            )
+            self.print_error(f"Unknown command: /{cmd}")
             return True
 
         return False
+
+    def _resolve_command_handler(self, name: str) -> Any | None:
+        """Resolve command handler by name or alias."""
+        handler = self._commands.get(name)
+        if handler is not None:
+            return handler
+
+        for candidate in self._commands.values():
+            if name in getattr(candidate, "aliases", []):
+                return candidate
+        return None
+
+    def _build_command_context(self) -> CommandContext:
+        """Build command execution context from current runtime state."""
+        return CommandContext(
+            working_directory=self._config.working_directory,
+            console=self._console,
+            engine=self._engine,
+            session=self._build_session_payload(),
+            config=getattr(self._engine, "config", None),
+        )
+
+    def _build_session_payload(self) -> dict[str, Any] | None:
+        """Build session metadata payload for command compatibility."""
+        session_manager = getattr(self._engine, "session_manager", None)
+        if session_manager is not None and hasattr(session_manager, "get_current_session"):
+            current = session_manager.get_current_session()
+            if current is not None and hasattr(current, "metadata"):
+                metadata = current.metadata
+                return {
+                    "id": metadata.id,
+                    "created_at": metadata.created_at,
+                    "last_active": metadata.last_active,
+                    "working_directory": metadata.working_directory,
+                    "message_count": metadata.message_count,
+                    "tool_call_count": metadata.tool_call_count,
+                }
+
+        engine_config = getattr(self._engine, "config", None)
+        session_id = getattr(engine_config, "session_id", None)
+        if session_id is None:
+            return None
+
+        return {
+            "id": session_id,
+            "message_count": len(getattr(self._engine, "messages", [])),
+            "tool_call_count": len(getattr(self._engine, "tool_results", [])),
+        }
+
+    def _render_command_result(self, result: CommandResult) -> None:
+        """Render command execution result to console."""
+        if result is None:
+            return
+        if not result.success:
+            self.print_error(result.error or "Command failed")
+            return
+        if result.is_silent:
+            return
+        if result.content:
+            content = str(result.content)
+            try:
+                self._console.print(Markdown(content))
+            except Exception:
+                self._console.print(content)
+
+    def _get_hooks_manager(self) -> Any | None:
+        """Resolve hooks manager from runtime engine."""
+        manager = getattr(self._engine, "hooks_manager", None)
+        if manager is None or not hasattr(manager, "trigger"):
+            return None
+        return manager
+
+    def _build_command_hook_context(
+        self,
+        *,
+        command_name: str,
+        command_args: str,
+        phase: str,
+        result: CommandResult | None = None,
+        error: str | None = None,
+    ) -> dict[str, Any]:
+        """Build normalized command hook context payload."""
+        engine_config = getattr(self._engine, "config", None)
+        context: dict[str, Any] = {
+            "source": "repl",
+            "phase": phase,
+            "command_name": command_name,
+            "command_args": command_args,
+            "working_directory": self._config.working_directory,
+            "session_id": getattr(engine_config, "session_id", None),
+            "model": getattr(engine_config, "model", None),
+        }
+        if result is not None:
+            context["success"] = result.success
+            if result.content is not None:
+                context["result_content"] = str(result.content)
+            if result.error:
+                context["result_error"] = result.error
+        if error:
+            context["error"] = error
+        return context
+
+    async def _trigger_command_hook(
+        self,
+        event: HookEvent,
+        context: dict[str, Any],
+    ) -> None:
+        """Trigger command hook event when hooks manager is available."""
+        manager = self._get_hooks_manager()
+        if manager is None:
+            return
+        try:
+            await manager.trigger(event, context)
+        except Exception:
+            return
 
     async def run(self) -> None:
         """Run the REPL loop."""
