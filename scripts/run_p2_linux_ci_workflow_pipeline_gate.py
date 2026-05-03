@@ -1,6 +1,6 @@
 """Phase 2 card P2-26 gate for Linux CI workflow full-pipeline orchestration.
 
-This script composes P2-17 -> P2-61 into one CI-entry pipeline:
+This script composes P2-17 -> P2-79 into one CI-entry pipeline:
 1) workflow plan generation,
 2) workflow YAML rendering,
 3) render drift sync,
@@ -43,7 +43,24 @@ This script composes P2-17 -> P2-61 into one CI-entry pipeline:
 40) gate manifest drift closure,
 41) terminal verdict closure,
 42) Linux validation dispatch,
-43) Linux validation verdict.
+43) Linux validation verdict,
+44) Linux validation verdict publish,
+45) Linux validation terminal publish,
+46) Linux validation final verdict,
+47) Linux validation final verdict publish,
+48) Linux validation final publish archive,
+49) Linux validation terminal verdict,
+50) Linux validation terminal verdict publish,
+51) Linux validation terminal dispatch,
+52) Linux validation terminal dispatch execution,
+53) Linux validation terminal dispatch traceability (poll-ready run tracking contract).
+54) Linux validation terminal dispatch completion await.
+55) Linux validation terminal dispatch terminal publish.
+56) Linux validation terminal dispatch final verdict.
+57) Linux validation terminal dispatch final publish archive.
+58) Linux validation terminal dispatch terminal verdict.
+59) Linux validation terminal dispatch terminal verdict publish.
+60) Linux validation terminal dispatch terminal verdict publish archive.
 """
 
 from __future__ import annotations
@@ -145,6 +162,42 @@ def build_ci_workflow_pipeline_commands(
     linux_validation_dispatch_markdown_output: Path,
     linux_validation_verdict_json_output: Path,
     linux_validation_verdict_markdown_output: Path,
+    linux_validation_verdict_publish_json_output: Path,
+    linux_validation_verdict_publish_markdown_output: Path,
+    linux_validation_terminal_publish_json_output: Path,
+    linux_validation_terminal_publish_markdown_output: Path,
+    linux_validation_final_verdict_json_output: Path,
+    linux_validation_final_verdict_markdown_output: Path,
+    linux_validation_final_verdict_publish_json_output: Path,
+    linux_validation_final_verdict_publish_markdown_output: Path,
+    linux_validation_final_publish_archive_json_output: Path,
+    linux_validation_final_publish_archive_markdown_output: Path,
+    linux_validation_terminal_verdict_json_output: Path,
+    linux_validation_terminal_verdict_markdown_output: Path,
+    linux_validation_terminal_verdict_publish_json_output: Path,
+    linux_validation_terminal_verdict_publish_markdown_output: Path,
+    linux_validation_terminal_dispatch_json_output: Path,
+    linux_validation_terminal_dispatch_markdown_output: Path,
+    linux_validation_terminal_dispatch_execution_json_output: Path,
+    linux_validation_terminal_dispatch_execution_markdown_output: Path,
+    linux_validation_terminal_dispatch_trace_json_output: Path,
+    linux_validation_terminal_dispatch_trace_markdown_output: Path,
+    linux_validation_terminal_dispatch_completion_json_output: Path,
+    linux_validation_terminal_dispatch_completion_markdown_output: Path,
+    linux_validation_terminal_dispatch_terminal_publish_json_output: Path,
+    linux_validation_terminal_dispatch_terminal_publish_markdown_output: Path,
+    linux_validation_terminal_dispatch_final_verdict_json_output: Path,
+    linux_validation_terminal_dispatch_final_verdict_markdown_output: Path,
+    linux_validation_terminal_dispatch_final_verdict_publish_json_output: Path,
+    linux_validation_terminal_dispatch_final_verdict_publish_markdown_output: Path,
+    linux_validation_terminal_dispatch_final_publish_archive_json_output: Path,
+    linux_validation_terminal_dispatch_final_publish_archive_markdown_output: Path,
+    linux_validation_terminal_dispatch_terminal_verdict_json_output: Path,
+    linux_validation_terminal_dispatch_terminal_verdict_markdown_output: Path,
+    linux_validation_terminal_dispatch_terminal_verdict_publish_json_output: Path,
+    linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_output: Path,
+    linux_validation_terminal_dispatch_terminal_verdict_publish_archive_json_output: Path,
+    linux_validation_terminal_dispatch_terminal_verdict_publish_archive_markdown_output: Path,
     workflow_name: str,
     python_version: str,
     artifact_prefix: str,
@@ -227,6 +280,24 @@ def build_ci_workflow_pipeline_commands(
     skip_terminal_verdict: bool,
     skip_linux_validation_dispatch: bool,
     skip_linux_validation_verdict: bool,
+    skip_linux_validation_verdict_publish: bool,
+    skip_linux_validation_terminal_publish: bool,
+    skip_linux_validation_final_verdict: bool,
+    skip_linux_validation_final_verdict_publish: bool,
+    skip_linux_validation_final_publish_archive: bool,
+    skip_linux_validation_terminal_verdict: bool,
+    skip_linux_validation_terminal_verdict_publish: bool,
+    skip_linux_validation_terminal_dispatch: bool,
+    skip_linux_validation_terminal_dispatch_execution: bool,
+    skip_linux_validation_terminal_dispatch_trace: bool,
+    skip_linux_validation_terminal_dispatch_completion: bool,
+    skip_linux_validation_terminal_dispatch_terminal_publish: bool,
+    skip_linux_validation_terminal_dispatch_final_verdict: bool,
+    skip_linux_validation_terminal_dispatch_final_verdict_publish: bool,
+    skip_linux_validation_terminal_dispatch_final_publish_archive: bool,
+    skip_linux_validation_terminal_dispatch_terminal_verdict: bool,
+    skip_linux_validation_terminal_dispatch_terminal_verdict_publish: bool,
+    skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive: bool,
 ) -> list[tuple[str, list[str]]]:
     pipeline: list[tuple[str, list[str]]] = []
 
@@ -1003,7 +1074,7 @@ def build_ci_workflow_pipeline_commands(
                 "workflow_linux_validation_dispatch",
                 [
                     python_executable,
-                    "scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py",
+                    "scripts/run_p2_lv_dispatch_gate.py",
                     "--terminal-verdict-report",
                     str(terminal_verdict_json_output),
                     "--project-root",
@@ -1026,7 +1097,7 @@ def build_ci_workflow_pipeline_commands(
                 "workflow_linux_validation_verdict",
                 [
                     python_executable,
-                    "scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py",
+                    "scripts/run_p2_lv_verdict_gate.py",
                     "--linux-validation-dispatch-report",
                     str(linux_validation_dispatch_json_output),
                     "--output-json",
@@ -1037,12 +1108,332 @@ def build_ci_workflow_pipeline_commands(
             )
         )
 
+    if not skip_linux_validation_verdict_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_verdict_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_verdict_publish_gate.py",
+                    "--linux-validation-verdict-report",
+                    str(linux_validation_verdict_json_output),
+                    "--output-json",
+                    str(linux_validation_verdict_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_verdict_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_terminal_publish_gate.py",
+                    "--linux-validation-verdict-publish-report",
+                    str(linux_validation_verdict_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_final_verdict:
+        pipeline.append(
+            (
+                "workflow_linux_validation_final_verdict",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_final_verdict_gate.py",
+                    "--linux-validation-terminal-publish-report",
+                    str(linux_validation_terminal_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_final_verdict_json_output),
+                    "--output-markdown",
+                    str(linux_validation_final_verdict_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_final_verdict_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_final_verdict_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_final_verdict_publish_gate.py",
+                    "--linux-validation-final-verdict-report",
+                    str(linux_validation_final_verdict_json_output),
+                    "--output-json",
+                    str(linux_validation_final_verdict_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_final_verdict_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_final_publish_archive:
+        pipeline.append(
+            (
+                "workflow_linux_validation_final_publish_archive",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_final_publish_archive_gate.py",
+                    "--linux-validation-final-verdict-publish-report",
+                    str(linux_validation_final_verdict_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_final_publish_archive_json_output),
+                    "--output-markdown",
+                    str(linux_validation_final_publish_archive_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_verdict:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_verdict",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_terminal_verdict_gate.py",
+                    "--linux-validation-final-publish-archive-report",
+                    str(linux_validation_final_publish_archive_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_verdict_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_verdict_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_verdict_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_verdict_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_terminal_verdict_publish_gate.py",
+                    "--linux-validation-terminal-verdict-report",
+                    str(linux_validation_terminal_verdict_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_verdict_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_verdict_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_dispatch_gate.py",
+                    "--linux-validation-terminal-verdict-publish-report",
+                    str(linux_validation_terminal_verdict_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_execution:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_execution",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_execution_gate.py",
+                    "--linux-validation-terminal-dispatch-report",
+                    str(linux_validation_terminal_dispatch_json_output),
+                    "--project-root",
+                    ".",
+                    "--python-executable",
+                    python_executable,
+                    "--linux-validation-terminal-timeout-seconds",
+                    str(linux_validation_timeout_seconds),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_execution_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_execution_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_trace:
+        command = [
+            python_executable,
+            "scripts/run_p2_lv_td_trace_gate.py",
+            "--linux-validation-terminal-dispatch-execution-report",
+            str(linux_validation_terminal_dispatch_execution_json_output),
+            "--project-root",
+            ".",
+            "--poll-timeout-seconds",
+            str(trace_poll_timeout_seconds),
+            "--output-json",
+            str(linux_validation_terminal_dispatch_trace_json_output),
+            "--output-markdown",
+            str(linux_validation_terminal_dispatch_trace_markdown_output),
+        ]
+        if dispatch_trace_poll_now:
+            command.append("--poll-now")
+        pipeline.append(("workflow_linux_validation_terminal_dispatch_trace", command))
+
+    if not skip_linux_validation_terminal_dispatch_completion:
+        command = [
+            python_executable,
+            "scripts/run_p2_lv_td_completion_gate.py",
+            "--linux-validation-terminal-dispatch-trace-report",
+            str(linux_validation_terminal_dispatch_trace_json_output),
+            "--project-root",
+            ".",
+            "--poll-interval-seconds",
+            str(completion_poll_interval_seconds),
+            "--max-polls",
+            str(completion_max_polls),
+            "--poll-timeout-seconds",
+            str(completion_poll_timeout_seconds),
+            "--output-json",
+            str(linux_validation_terminal_dispatch_completion_json_output),
+            "--output-markdown",
+            str(linux_validation_terminal_dispatch_completion_markdown_output),
+        ]
+        if completion_allow_in_progress:
+            command.append("--allow-in-progress")
+        pipeline.append(("workflow_linux_validation_terminal_dispatch_completion", command))
+
+    if not skip_linux_validation_terminal_dispatch_terminal_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_terminal_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_terminal_publish_gate.py",
+                    "--linux-validation-terminal-dispatch-completion-report",
+                    str(linux_validation_terminal_dispatch_completion_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_terminal_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_terminal_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_final_verdict:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_final_verdict",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_final_verdict_gate.py",
+                    "--linux-validation-terminal-dispatch-terminal-publish-report",
+                    str(linux_validation_terminal_dispatch_terminal_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_final_verdict_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_final_verdict_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_final_verdict_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_final_verdict_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_final_verdict_publish_gate.py",
+                    "--linux-validation-terminal-dispatch-final-verdict-report",
+                    str(linux_validation_terminal_dispatch_final_verdict_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_final_verdict_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_final_verdict_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_final_publish_archive:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_final_publish_archive",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_final_publish_archive_gate.py",
+                    "--linux-validation-terminal-dispatch-final-verdict-publish-report",
+                    str(linux_validation_terminal_dispatch_final_verdict_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_final_publish_archive_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_final_publish_archive_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_terminal_verdict:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_terminal_verdict",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_terminal_verdict_gate.py",
+                    "--linux-validation-terminal-dispatch-final-publish-archive-report",
+                    str(linux_validation_terminal_dispatch_final_publish_archive_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_terminal_verdict_publish:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_tverdict_publish_gate.py",
+                    "--linux-validation-terminal-dispatch-terminal-verdict-report",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_publish_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_output),
+                ],
+            )
+        )
+
+    if not skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive:
+        pipeline.append(
+            (
+                "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive",
+                [
+                    python_executable,
+                    "scripts/run_p2_lv_td_tverdict_publish_archive_gate.py",
+                    "--linux-validation-terminal-dispatch-terminal-verdict-publish-report",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_publish_json_output),
+                    "--output-json",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_publish_archive_json_output),
+                    "--output-markdown",
+                    str(linux_validation_terminal_dispatch_terminal_verdict_publish_archive_markdown_output),
+                ],
+            )
+        )
+
     return pipeline
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run Linux CI workflow full pipeline: P2-17 -> P2-61"
+        description="Run Linux CI workflow full pipeline: P2-17 -> P2-79"
     )
     parser.add_argument(
         "--python-executable",
@@ -1458,6 +1849,186 @@ def main() -> int:
         "--linux-validation-verdict-markdown-output",
         default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict.md",
         help="P2-61 Linux validation verdict markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-verdict-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict_publish.json",
+        help="P2-62 Linux validation verdict publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-verdict-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict_publish.md",
+        help="P2-62 Linux validation verdict publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_publish.json",
+        help="P2-63 Linux validation terminal publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_publish.md",
+        help="P2-63 Linux validation terminal publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-final-verdict-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict.json",
+        help="P2-64 Linux validation final verdict JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-final-verdict-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict.md",
+        help="P2-64 Linux validation final verdict markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-final-verdict-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict_publish.json",
+        help="P2-65 Linux validation final verdict publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-final-verdict-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict_publish.md",
+        help="P2-65 Linux validation final verdict publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-final-publish-archive-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_publish_archive.json",
+        help="P2-66 Linux validation final publish archive JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-final-publish-archive-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_publish_archive.md",
+        help="P2-66 Linux validation final publish archive markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-verdict-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict.json",
+        help="P2-67 Linux validation terminal verdict JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-verdict-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict.md",
+        help="P2-67 Linux validation terminal verdict markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-verdict-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict_publish.json",
+        help="P2-68 Linux validation terminal verdict publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-verdict-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict_publish.md",
+        help="P2-68 Linux validation terminal verdict publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch.json",
+        help="P2-69 Linux validation terminal dispatch JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch.md",
+        help="P2-69 Linux validation terminal dispatch markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-execution-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_execution.json",
+        help="P2-70 Linux validation terminal dispatch execution JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-execution-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_execution.md",
+        help="P2-70 Linux validation terminal dispatch execution markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-trace-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_trace.json",
+        help="P2-71 Linux validation terminal dispatch trace JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-trace-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_trace.md",
+        help="P2-71 Linux validation terminal dispatch trace markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-completion-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.json",
+        help="P2-72 Linux validation terminal dispatch completion JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-completion-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.md",
+        help="P2-72 Linux validation terminal dispatch completion markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_publish.json",
+        help="P2-73 Linux validation terminal dispatch terminal publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_publish.md",
+        help="P2-73 Linux validation terminal dispatch terminal publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-final-verdict-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict.json",
+        help="P2-74 Linux validation terminal dispatch final verdict JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-final-verdict-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict.md",
+        help="P2-74 Linux validation terminal dispatch final verdict markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-final-verdict-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.json",
+        help="P2-75 Linux validation terminal dispatch final verdict publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-final-verdict-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.md",
+        help="P2-75 Linux validation terminal dispatch final verdict publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-final-publish-archive-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.json",
+        help="P2-76 Linux validation terminal dispatch final publish archive JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-final-publish-archive-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.md",
+        help="P2-76 Linux validation terminal dispatch final publish archive markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-verdict-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.json",
+        help="P2-77 Linux validation terminal dispatch terminal verdict JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-verdict-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.md",
+        help="P2-77 Linux validation terminal dispatch terminal verdict markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-verdict-publish-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.json",
+        help="P2-78 Linux validation terminal dispatch terminal verdict publish JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-verdict-publish-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.md",
+        help="P2-78 Linux validation terminal dispatch terminal verdict publish markdown path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-verdict-publish-archive-json-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive.json",
+        help="P2-79 Linux validation terminal dispatch terminal verdict publish archive JSON path",
+    )
+    parser.add_argument(
+        "--linux-validation-terminal-dispatch-terminal-verdict-publish-archive-markdown-output",
+        default=".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive.md",
+        help="P2-79 Linux validation terminal dispatch terminal verdict publish archive markdown path",
     )
     parser.add_argument(
         "--workflow-name",
@@ -1885,6 +2456,96 @@ def main() -> int:
         help="Skip P2-61 Linux validation verdict stage",
     )
     parser.add_argument(
+        "--skip-linux-validation-verdict-publish",
+        action="store_true",
+        help="Skip P2-62 Linux validation verdict publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-publish",
+        action="store_true",
+        help="Skip P2-63 Linux validation terminal publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-final-verdict",
+        action="store_true",
+        help="Skip P2-64 Linux validation final verdict stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-final-verdict-publish",
+        action="store_true",
+        help="Skip P2-65 Linux validation final verdict publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-final-publish-archive",
+        action="store_true",
+        help="Skip P2-66 Linux validation final publish archive stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-verdict",
+        action="store_true",
+        help="Skip P2-67 Linux validation terminal verdict stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-verdict-publish",
+        action="store_true",
+        help="Skip P2-68 Linux validation terminal verdict publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch",
+        action="store_true",
+        help="Skip P2-69 Linux validation terminal dispatch stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-execution",
+        action="store_true",
+        help="Skip P2-70 Linux validation terminal dispatch execution stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-trace",
+        action="store_true",
+        help="Skip P2-71 Linux validation terminal dispatch trace stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-completion",
+        action="store_true",
+        help="Skip P2-72 Linux validation terminal dispatch completion stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-terminal-publish",
+        action="store_true",
+        help="Skip P2-73 Linux validation terminal dispatch terminal publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-final-verdict",
+        action="store_true",
+        help="Skip P2-74 Linux validation terminal dispatch final verdict stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-final-verdict-publish",
+        action="store_true",
+        help="Skip P2-75 Linux validation terminal dispatch final verdict publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-final-publish-archive",
+        action="store_true",
+        help="Skip P2-76 Linux validation terminal dispatch final publish archive stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-terminal-verdict",
+        action="store_true",
+        help="Skip P2-77 Linux validation terminal dispatch terminal verdict stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-terminal-verdict-publish",
+        action="store_true",
+        help="Skip P2-78 Linux validation terminal dispatch terminal verdict publish stage",
+    )
+    parser.add_argument(
+        "--skip-linux-validation-terminal-dispatch-terminal-verdict-publish-archive",
+        action="store_true",
+        help="Skip P2-79 Linux validation terminal dispatch terminal verdict publish archive stage",
+    )
+    parser.add_argument(
         "--print-commands",
         action="store_true",
         help="Print planned commands",
@@ -1900,6 +2561,59 @@ def main() -> int:
         help="Stop at first non-zero stage exit code",
     )
     args = parser.parse_args()
+
+    if not args.skip_linux_validation_terminal_verdict:
+        args.skip_linux_validation_terminal_verdict = bool(
+            args.skip_linux_validation_final_publish_archive
+        )
+    if not args.skip_linux_validation_terminal_verdict_publish:
+        args.skip_linux_validation_terminal_verdict_publish = bool(
+            args.skip_linux_validation_terminal_verdict
+        )
+    if not args.skip_linux_validation_terminal_dispatch:
+        args.skip_linux_validation_terminal_dispatch = bool(
+            args.skip_linux_validation_terminal_verdict_publish
+        )
+    if not args.skip_linux_validation_terminal_dispatch_execution:
+        args.skip_linux_validation_terminal_dispatch_execution = bool(
+            args.skip_linux_validation_terminal_dispatch
+        )
+    if not args.skip_linux_validation_terminal_dispatch_trace:
+        args.skip_linux_validation_terminal_dispatch_trace = bool(
+            args.skip_linux_validation_terminal_dispatch_execution
+        )
+    if not args.skip_linux_validation_terminal_dispatch_completion:
+        args.skip_linux_validation_terminal_dispatch_completion = bool(
+            args.skip_linux_validation_terminal_dispatch_trace
+        )
+    if not args.skip_linux_validation_terminal_dispatch_terminal_publish:
+        args.skip_linux_validation_terminal_dispatch_terminal_publish = bool(
+            args.skip_linux_validation_terminal_dispatch_completion
+        )
+    if not args.skip_linux_validation_terminal_dispatch_final_verdict:
+        args.skip_linux_validation_terminal_dispatch_final_verdict = bool(
+            args.skip_linux_validation_terminal_dispatch_terminal_publish
+        )
+    if not args.skip_linux_validation_terminal_dispatch_final_verdict_publish:
+        args.skip_linux_validation_terminal_dispatch_final_verdict_publish = bool(
+            args.skip_linux_validation_terminal_dispatch_final_verdict
+        )
+    if not args.skip_linux_validation_terminal_dispatch_final_publish_archive:
+        args.skip_linux_validation_terminal_dispatch_final_publish_archive = bool(
+            args.skip_linux_validation_terminal_dispatch_final_verdict_publish
+        )
+    if not args.skip_linux_validation_terminal_dispatch_terminal_verdict:
+        args.skip_linux_validation_terminal_dispatch_terminal_verdict = bool(
+            args.skip_linux_validation_terminal_dispatch_final_publish_archive
+        )
+    if not args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish:
+        args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish = bool(
+            args.skip_linux_validation_terminal_dispatch_terminal_verdict
+        )
+    if not args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive:
+        args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive = bool(
+            args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish
+        )
 
     if args.dispatch_timeout_seconds < 1:
         print(
@@ -2123,7 +2837,115 @@ def main() -> int:
         linux_validation_verdict_markdown_output=Path(
             args.linux_validation_verdict_markdown_output
         ),
+        linux_validation_verdict_publish_json_output=Path(
+            args.linux_validation_verdict_publish_json_output
+        ),
+        linux_validation_verdict_publish_markdown_output=Path(
+            args.linux_validation_verdict_publish_markdown_output
+        ),
+        linux_validation_terminal_publish_json_output=Path(
+            args.linux_validation_terminal_publish_json_output
+        ),
+        linux_validation_terminal_publish_markdown_output=Path(
+            args.linux_validation_terminal_publish_markdown_output
+        ),
+        linux_validation_final_verdict_json_output=Path(
+            args.linux_validation_final_verdict_json_output
+        ),
+        linux_validation_final_verdict_markdown_output=Path(
+            args.linux_validation_final_verdict_markdown_output
+        ),
+        linux_validation_final_verdict_publish_json_output=Path(
+            args.linux_validation_final_verdict_publish_json_output
+        ),
+        linux_validation_final_verdict_publish_markdown_output=Path(
+            args.linux_validation_final_verdict_publish_markdown_output
+        ),
+        linux_validation_final_publish_archive_json_output=Path(
+            args.linux_validation_final_publish_archive_json_output
+        ),
+        linux_validation_final_publish_archive_markdown_output=Path(
+            args.linux_validation_final_publish_archive_markdown_output
+        ),
+        linux_validation_terminal_verdict_json_output=Path(
+            args.linux_validation_terminal_verdict_json_output
+        ),
+        linux_validation_terminal_verdict_markdown_output=Path(
+            args.linux_validation_terminal_verdict_markdown_output
+        ),
+        linux_validation_terminal_verdict_publish_json_output=Path(
+            args.linux_validation_terminal_verdict_publish_json_output
+        ),
+        linux_validation_terminal_verdict_publish_markdown_output=Path(
+            args.linux_validation_terminal_verdict_publish_markdown_output
+        ),
+        linux_validation_terminal_dispatch_json_output=Path(
+            args.linux_validation_terminal_dispatch_json_output
+        ),
+        linux_validation_terminal_dispatch_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_markdown_output
+        ),
+        linux_validation_terminal_dispatch_execution_json_output=Path(
+            args.linux_validation_terminal_dispatch_execution_json_output
+        ),
+        linux_validation_terminal_dispatch_execution_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_execution_markdown_output
+        ),
+        linux_validation_terminal_dispatch_trace_json_output=Path(
+            args.linux_validation_terminal_dispatch_trace_json_output
+        ),
+        linux_validation_terminal_dispatch_trace_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_trace_markdown_output
+        ),
+        linux_validation_terminal_dispatch_completion_json_output=Path(
+            args.linux_validation_terminal_dispatch_completion_json_output
+        ),
+        linux_validation_terminal_dispatch_completion_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_completion_markdown_output
+        ),
+        linux_validation_terminal_dispatch_terminal_publish_json_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_publish_json_output
+        ),
+        linux_validation_terminal_dispatch_terminal_publish_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_publish_markdown_output
+        ),
+        linux_validation_terminal_dispatch_final_verdict_json_output=Path(
+            args.linux_validation_terminal_dispatch_final_verdict_json_output
+        ),
+        linux_validation_terminal_dispatch_final_verdict_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_final_verdict_markdown_output
+        ),
+        linux_validation_terminal_dispatch_final_verdict_publish_json_output=Path(
+            args.linux_validation_terminal_dispatch_final_verdict_publish_json_output
+        ),
+        linux_validation_terminal_dispatch_final_verdict_publish_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_final_verdict_publish_markdown_output
+        ),
+        linux_validation_terminal_dispatch_final_publish_archive_json_output=Path(
+            args.linux_validation_terminal_dispatch_final_publish_archive_json_output
+        ),
+        linux_validation_terminal_dispatch_final_publish_archive_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_final_publish_archive_markdown_output
+        ),
         workflow_name=args.workflow_name,
+        linux_validation_terminal_dispatch_terminal_verdict_json_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_verdict_json_output
+        ),
+        linux_validation_terminal_dispatch_terminal_verdict_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_verdict_markdown_output
+        ),
+        linux_validation_terminal_dispatch_terminal_verdict_publish_json_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_verdict_publish_json_output
+        ),
+        linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_output
+        ),
+        linux_validation_terminal_dispatch_terminal_verdict_publish_archive_json_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_verdict_publish_archive_json_output
+        ),
+        linux_validation_terminal_dispatch_terminal_verdict_publish_archive_markdown_output=Path(
+            args.linux_validation_terminal_dispatch_terminal_verdict_publish_archive_markdown_output
+        ),
         python_version=args.python_version,
         artifact_prefix=args.artifact_prefix,
         target_environment=args.target_environment,
@@ -2205,6 +3027,24 @@ def main() -> int:
         skip_terminal_verdict=args.skip_terminal_verdict,
         skip_linux_validation_dispatch=args.skip_linux_validation_dispatch,
         skip_linux_validation_verdict=args.skip_linux_validation_verdict,
+        skip_linux_validation_verdict_publish=args.skip_linux_validation_verdict_publish,
+        skip_linux_validation_terminal_publish=args.skip_linux_validation_terminal_publish,
+        skip_linux_validation_final_verdict=args.skip_linux_validation_final_verdict,
+        skip_linux_validation_final_verdict_publish=args.skip_linux_validation_final_verdict_publish,
+        skip_linux_validation_final_publish_archive=args.skip_linux_validation_final_publish_archive,
+        skip_linux_validation_terminal_verdict=args.skip_linux_validation_terminal_verdict,
+        skip_linux_validation_terminal_verdict_publish=args.skip_linux_validation_terminal_verdict_publish,
+        skip_linux_validation_terminal_dispatch=args.skip_linux_validation_terminal_dispatch,
+        skip_linux_validation_terminal_dispatch_execution=args.skip_linux_validation_terminal_dispatch_execution,
+        skip_linux_validation_terminal_dispatch_trace=args.skip_linux_validation_terminal_dispatch_trace,
+        skip_linux_validation_terminal_dispatch_completion=args.skip_linux_validation_terminal_dispatch_completion,
+        skip_linux_validation_terminal_dispatch_terminal_publish=args.skip_linux_validation_terminal_dispatch_terminal_publish,
+        skip_linux_validation_terminal_dispatch_final_verdict=args.skip_linux_validation_terminal_dispatch_final_verdict,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=args.skip_linux_validation_terminal_dispatch_final_verdict_publish,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=args.skip_linux_validation_terminal_dispatch_final_publish_archive,
+        skip_linux_validation_terminal_dispatch_terminal_verdict=args.skip_linux_validation_terminal_dispatch_terminal_verdict,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish=args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive=args.skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive,
     )
 
     if not pipeline:
@@ -2232,3 +3072,13 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
+
+
+
+
+
+

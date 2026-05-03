@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def _load_ci_workflow_linux_validation_verdict_gate_module():
-    script_path = Path("scripts") / "run_p2_linux_ci_workflow_linux_validation_verdict_gate.py"
+    script_path = Path("scripts") / "run_p2_lv_verdict_gate.py"
     spec = importlib.util.spec_from_file_location(
         "p2_linux_ci_workflow_linux_validation_verdict_gate",
         script_path,

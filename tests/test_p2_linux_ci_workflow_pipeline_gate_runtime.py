@@ -211,6 +211,42 @@ def _build_commands(**overrides):
         "linux_validation_dispatch_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_dispatch.md"),
         "linux_validation_verdict_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict.json"),
         "linux_validation_verdict_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict.md"),
+        "linux_validation_verdict_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict_publish.json"),
+        "linux_validation_verdict_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict_publish.md"),
+        "linux_validation_terminal_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_publish.json"),
+        "linux_validation_terminal_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_publish.md"),
+        "linux_validation_final_verdict_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict.json"),
+        "linux_validation_final_verdict_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict.md"),
+        "linux_validation_final_verdict_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict_publish.json"),
+        "linux_validation_final_verdict_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict_publish.md"),
+        "linux_validation_final_publish_archive_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_publish_archive.json"),
+        "linux_validation_final_publish_archive_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_publish_archive.md"),
+        "linux_validation_terminal_verdict_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict.json"),
+        "linux_validation_terminal_verdict_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict.md"),
+        "linux_validation_terminal_verdict_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict_publish.json"),
+        "linux_validation_terminal_verdict_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict_publish.md"),
+        "linux_validation_terminal_dispatch_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch.json"),
+        "linux_validation_terminal_dispatch_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch.md"),
+        "linux_validation_terminal_dispatch_execution_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_execution.json"),
+        "linux_validation_terminal_dispatch_execution_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_execution.md"),
+        "linux_validation_terminal_dispatch_trace_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_trace.json"),
+        "linux_validation_terminal_dispatch_trace_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_trace.md"),
+        "linux_validation_terminal_dispatch_completion_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.json"),
+        "linux_validation_terminal_dispatch_completion_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.md"),
+        "linux_validation_terminal_dispatch_terminal_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_publish.json"),
+        "linux_validation_terminal_dispatch_terminal_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_publish.md"),
+        "linux_validation_terminal_dispatch_final_verdict_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict.json"),
+        "linux_validation_terminal_dispatch_final_verdict_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict.md"),
+        "linux_validation_terminal_dispatch_final_verdict_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.json"),
+        "linux_validation_terminal_dispatch_final_verdict_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.md"),
+        "linux_validation_terminal_dispatch_final_publish_archive_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.json"),
+        "linux_validation_terminal_dispatch_final_publish_archive_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.md"),
+        "linux_validation_terminal_dispatch_terminal_verdict_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.json"),
+        "linux_validation_terminal_dispatch_terminal_verdict_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.md"),
+        "linux_validation_terminal_dispatch_terminal_verdict_publish_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.json"),
+        "linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.md"),
+        "linux_validation_terminal_dispatch_terminal_verdict_publish_archive_json_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive.json"),
+        "linux_validation_terminal_dispatch_terminal_verdict_publish_archive_markdown_output": Path(".claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive.md"),
         "workflow_name": "Linux Unified Gate",
         "python_version": "3.11",
         "artifact_prefix": "linux-unified-summary",
@@ -293,6 +329,24 @@ def _build_commands(**overrides):
         "skip_terminal_verdict": False,
         "skip_linux_validation_dispatch": False,
         "skip_linux_validation_verdict": False,
+        "skip_linux_validation_verdict_publish": False,
+        "skip_linux_validation_terminal_publish": False,
+        "skip_linux_validation_final_verdict": False,
+        "skip_linux_validation_final_verdict_publish": False,
+        "skip_linux_validation_final_publish_archive": False,
+        "skip_linux_validation_terminal_verdict": False,
+        "skip_linux_validation_terminal_verdict_publish": False,
+        "skip_linux_validation_terminal_dispatch": False,
+        "skip_linux_validation_terminal_dispatch_execution": False,
+        "skip_linux_validation_terminal_dispatch_trace": False,
+        "skip_linux_validation_terminal_dispatch_completion": False,
+        "skip_linux_validation_terminal_dispatch_terminal_publish": False,
+        "skip_linux_validation_terminal_dispatch_final_verdict": False,
+        "skip_linux_validation_terminal_dispatch_final_verdict_publish": False,
+        "skip_linux_validation_terminal_dispatch_final_publish_archive": False,
+        "skip_linux_validation_terminal_dispatch_terminal_verdict": False,
+        "skip_linux_validation_terminal_dispatch_terminal_verdict_publish": False,
+        "skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive": False,
     }
     kwargs.update(overrides)
     if "skip_terminal_verdict" not in overrides:
@@ -305,6 +359,78 @@ def _build_commands(**overrides):
     if "skip_linux_validation_verdict" not in overrides:
         kwargs["skip_linux_validation_verdict"] = bool(
             kwargs["skip_linux_validation_dispatch"]
+        )
+    if "skip_linux_validation_verdict_publish" not in overrides:
+        kwargs["skip_linux_validation_verdict_publish"] = bool(
+            kwargs["skip_linux_validation_verdict"]
+        )
+    if "skip_linux_validation_terminal_publish" not in overrides:
+        kwargs["skip_linux_validation_terminal_publish"] = bool(
+            kwargs["skip_linux_validation_verdict_publish"]
+        )
+    if "skip_linux_validation_final_verdict" not in overrides:
+        kwargs["skip_linux_validation_final_verdict"] = bool(
+            kwargs["skip_linux_validation_terminal_publish"]
+        )
+    if "skip_linux_validation_final_verdict_publish" not in overrides:
+        kwargs["skip_linux_validation_final_verdict_publish"] = bool(
+            kwargs["skip_linux_validation_final_verdict"]
+        )
+    if "skip_linux_validation_final_publish_archive" not in overrides:
+        kwargs["skip_linux_validation_final_publish_archive"] = bool(
+            kwargs["skip_linux_validation_final_verdict_publish"]
+        )
+    if "skip_linux_validation_terminal_verdict" not in overrides:
+        kwargs["skip_linux_validation_terminal_verdict"] = bool(
+            kwargs["skip_linux_validation_final_publish_archive"]
+        )
+    if "skip_linux_validation_terminal_verdict_publish" not in overrides:
+        kwargs["skip_linux_validation_terminal_verdict_publish"] = bool(
+            kwargs["skip_linux_validation_terminal_verdict"]
+        )
+    if "skip_linux_validation_terminal_dispatch" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch"] = bool(
+            kwargs["skip_linux_validation_terminal_verdict_publish"]
+        )
+    if "skip_linux_validation_terminal_dispatch_execution" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_execution"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch"]
+        )
+    if "skip_linux_validation_terminal_dispatch_trace" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_trace"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_execution"]
+        )
+    if "skip_linux_validation_terminal_dispatch_completion" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_completion"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_trace"]
+        )
+    if "skip_linux_validation_terminal_dispatch_terminal_publish" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_terminal_publish"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_completion"]
+        )
+    if "skip_linux_validation_terminal_dispatch_final_verdict" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_final_verdict"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_terminal_publish"]
+        )
+    if "skip_linux_validation_terminal_dispatch_final_verdict_publish" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_final_verdict_publish"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_final_verdict"]
+        )
+    if "skip_linux_validation_terminal_dispatch_final_publish_archive" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_final_publish_archive"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_final_verdict_publish"]
+        )
+    if "skip_linux_validation_terminal_dispatch_terminal_verdict" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_terminal_verdict"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_final_publish_archive"]
+        )
+    if "skip_linux_validation_terminal_dispatch_terminal_verdict_publish" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_terminal_verdict_publish"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_terminal_verdict"]
+        )
+    if "skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive" not in overrides:
+        kwargs["skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive"] = bool(
+            kwargs["skip_linux_validation_terminal_dispatch_terminal_verdict_publish"]
         )
     return gate.build_ci_workflow_pipeline_commands(**kwargs)
 
@@ -355,6 +481,24 @@ def test_build_ci_workflow_pipeline_commands_default_stage_chain():
         "workflow_terminal_verdict",
         "workflow_linux_validation_dispatch",
         "workflow_linux_validation_verdict",
+        "workflow_linux_validation_verdict_publish",
+        "workflow_linux_validation_terminal_publish",
+        "workflow_linux_validation_final_verdict",
+        "workflow_linux_validation_final_verdict_publish",
+        "workflow_linux_validation_final_publish_archive",
+        "workflow_linux_validation_terminal_verdict",
+        "workflow_linux_validation_terminal_verdict_publish",
+        "workflow_linux_validation_terminal_dispatch",
+        "workflow_linux_validation_terminal_dispatch_execution",
+        "workflow_linux_validation_terminal_dispatch_trace",
+        "workflow_linux_validation_terminal_dispatch_completion",
+        "workflow_linux_validation_terminal_dispatch_terminal_publish",
+        "workflow_linux_validation_terminal_dispatch_final_verdict",
+        "workflow_linux_validation_terminal_dispatch_final_verdict_publish",
+        "workflow_linux_validation_terminal_dispatch_final_publish_archive",
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict",
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish",
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive",
     ]
 
     assert commands[0][1][:2] == ["python", "scripts/run_p2_linux_ci_workflow_plan_gate.py"]
@@ -505,11 +649,83 @@ def test_build_ci_workflow_pipeline_commands_default_stage_chain():
     ]
     assert commands[41][1][:2] == [
         "python",
-        "scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py",
+        "scripts/run_p2_lv_dispatch_gate.py",
     ]
     assert commands[42][1][:2] == [
         "python",
-        "scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py",
+        "scripts/run_p2_lv_verdict_gate.py",
+    ]
+    assert commands[43][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_verdict_publish_gate.py",
+    ]
+    assert commands[44][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_terminal_publish_gate.py",
+    ]
+    assert commands[45][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_final_verdict_gate.py",
+    ]
+    assert commands[46][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_final_verdict_publish_gate.py",
+    ]
+    assert commands[47][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_final_publish_archive_gate.py",
+    ]
+    assert commands[48][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_terminal_verdict_gate.py",
+    ]
+    assert commands[49][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_terminal_verdict_publish_gate.py",
+    ]
+    assert commands[50][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_dispatch_gate.py",
+    ]
+    assert commands[51][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_execution_gate.py",
+    ]
+    assert commands[52][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_trace_gate.py",
+    ]
+    assert commands[53][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_completion_gate.py",
+    ]
+    assert commands[54][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_terminal_publish_gate.py",
+    ]
+    assert commands[55][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_final_verdict_gate.py",
+    ]
+    assert commands[56][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_final_verdict_publish_gate.py",
+    ]
+    assert commands[57][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_final_publish_archive_gate.py",
+    ]
+    assert commands[58][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_terminal_verdict_gate.py",
+    ]
+    assert commands[59][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_tverdict_publish_gate.py",
+    ]
+    assert commands[60][1][:2] == [
+        "python",
+        "scripts/run_p2_lv_td_tverdict_publish_archive_gate.py",
     ]
 
 
@@ -912,7 +1128,7 @@ def test_build_ci_workflow_pipeline_commands_propagates_optional_flags():
     linux_validation_dispatch_command = command_map["workflow_linux_validation_dispatch"]
     assert linux_validation_dispatch_command[:2] == [
         "python",
-        "scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py",
+        "scripts/run_p2_lv_dispatch_gate.py",
     ]
     linux_validation_terminal_verdict_report_index = (
         linux_validation_dispatch_command.index("--terminal-verdict-report") + 1
@@ -947,7 +1163,7 @@ def test_build_ci_workflow_pipeline_commands_propagates_optional_flags():
     linux_validation_verdict_command = command_map["workflow_linux_validation_verdict"]
     assert linux_validation_verdict_command[:2] == [
         "python",
-        "scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py",
+        "scripts/run_p2_lv_verdict_gate.py",
     ]
     linux_validation_verdict_dispatch_report_index = (
         linux_validation_verdict_command.index("--linux-validation-dispatch-report") + 1
@@ -967,6 +1183,536 @@ def test_build_ci_workflow_pipeline_commands_propagates_optional_flags():
     assert linux_validation_verdict_command[
         linux_validation_verdict_markdown_index
     ].endswith("ci_workflow_linux_validation_verdict.md")
+    linux_validation_verdict_publish_command = command_map[
+        "workflow_linux_validation_verdict_publish"
+    ]
+    assert linux_validation_verdict_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_verdict_publish_gate.py",
+    ]
+    linux_validation_verdict_publish_report_index = (
+        linux_validation_verdict_publish_command.index("--linux-validation-verdict-report")
+        + 1
+    )
+    assert linux_validation_verdict_publish_command[
+        linux_validation_verdict_publish_report_index
+    ].endswith("ci_workflow_linux_validation_verdict.json")
+    linux_validation_verdict_publish_json_index = (
+        linux_validation_verdict_publish_command.index("--output-json") + 1
+    )
+    assert linux_validation_verdict_publish_command[
+        linux_validation_verdict_publish_json_index
+    ].endswith("ci_workflow_linux_validation_verdict_publish.json")
+    linux_validation_verdict_publish_markdown_index = (
+        linux_validation_verdict_publish_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_verdict_publish_command[
+        linux_validation_verdict_publish_markdown_index
+    ].endswith("ci_workflow_linux_validation_verdict_publish.md")
+    linux_validation_terminal_publish_command = command_map[
+        "workflow_linux_validation_terminal_publish"
+    ]
+    assert linux_validation_terminal_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_terminal_publish_gate.py",
+    ]
+    linux_validation_terminal_publish_report_index = (
+        linux_validation_terminal_publish_command.index(
+            "--linux-validation-verdict-publish-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_publish_command[
+        linux_validation_terminal_publish_report_index
+    ].endswith("ci_workflow_linux_validation_verdict_publish.json")
+    linux_validation_terminal_publish_json_index = (
+        linux_validation_terminal_publish_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_publish_command[
+        linux_validation_terminal_publish_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_publish.json")
+    linux_validation_terminal_publish_markdown_index = (
+        linux_validation_terminal_publish_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_publish_command[
+        linux_validation_terminal_publish_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_publish.md")
+    linux_validation_final_verdict_command = command_map[
+        "workflow_linux_validation_final_verdict"
+    ]
+    assert linux_validation_final_verdict_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_final_verdict_gate.py",
+    ]
+    linux_validation_final_verdict_report_index = (
+        linux_validation_final_verdict_command.index(
+            "--linux-validation-terminal-publish-report"
+        )
+        + 1
+    )
+    assert linux_validation_final_verdict_command[
+        linux_validation_final_verdict_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_publish.json")
+    linux_validation_final_verdict_json_index = (
+        linux_validation_final_verdict_command.index("--output-json") + 1
+    )
+    assert linux_validation_final_verdict_command[
+        linux_validation_final_verdict_json_index
+    ].endswith("ci_workflow_linux_validation_final_verdict.json")
+    linux_validation_final_verdict_markdown_index = (
+        linux_validation_final_verdict_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_final_verdict_command[
+        linux_validation_final_verdict_markdown_index
+    ].endswith("ci_workflow_linux_validation_final_verdict.md")
+    linux_validation_final_verdict_publish_command = command_map[
+        "workflow_linux_validation_final_verdict_publish"
+    ]
+    assert linux_validation_final_verdict_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_final_verdict_publish_gate.py",
+    ]
+    linux_validation_final_verdict_publish_report_index = (
+        linux_validation_final_verdict_publish_command.index(
+            "--linux-validation-final-verdict-report"
+        )
+        + 1
+    )
+    assert linux_validation_final_verdict_publish_command[
+        linux_validation_final_verdict_publish_report_index
+    ].endswith("ci_workflow_linux_validation_final_verdict.json")
+    linux_validation_final_verdict_publish_json_index = (
+        linux_validation_final_verdict_publish_command.index("--output-json") + 1
+    )
+    assert linux_validation_final_verdict_publish_command[
+        linux_validation_final_verdict_publish_json_index
+    ].endswith("ci_workflow_linux_validation_final_verdict_publish.json")
+    linux_validation_final_verdict_publish_markdown_index = (
+        linux_validation_final_verdict_publish_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_final_verdict_publish_command[
+        linux_validation_final_verdict_publish_markdown_index
+    ].endswith("ci_workflow_linux_validation_final_verdict_publish.md")
+    linux_validation_final_publish_archive_command = command_map[
+        "workflow_linux_validation_final_publish_archive"
+    ]
+    assert linux_validation_final_publish_archive_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_final_publish_archive_gate.py",
+    ]
+    linux_validation_final_publish_archive_report_index = (
+        linux_validation_final_publish_archive_command.index(
+            "--linux-validation-final-verdict-publish-report"
+        )
+        + 1
+    )
+    assert linux_validation_final_publish_archive_command[
+        linux_validation_final_publish_archive_report_index
+    ].endswith("ci_workflow_linux_validation_final_verdict_publish.json")
+    linux_validation_final_publish_archive_json_index = (
+        linux_validation_final_publish_archive_command.index("--output-json") + 1
+    )
+    assert linux_validation_final_publish_archive_command[
+        linux_validation_final_publish_archive_json_index
+    ].endswith("ci_workflow_linux_validation_final_publish_archive.json")
+    linux_validation_final_publish_archive_markdown_index = (
+        linux_validation_final_publish_archive_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_final_publish_archive_command[
+        linux_validation_final_publish_archive_markdown_index
+    ].endswith("ci_workflow_linux_validation_final_publish_archive.md")
+    linux_validation_terminal_verdict_command = command_map[
+        "workflow_linux_validation_terminal_verdict"
+    ]
+    assert linux_validation_terminal_verdict_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_terminal_verdict_gate.py",
+    ]
+    linux_validation_terminal_verdict_report_index = (
+        linux_validation_terminal_verdict_command.index(
+            "--linux-validation-final-publish-archive-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_verdict_command[
+        linux_validation_terminal_verdict_report_index
+    ].endswith("ci_workflow_linux_validation_final_publish_archive.json")
+    linux_validation_terminal_verdict_json_index = (
+        linux_validation_terminal_verdict_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_verdict_command[
+        linux_validation_terminal_verdict_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_verdict.json")
+    linux_validation_terminal_verdict_markdown_index = (
+        linux_validation_terminal_verdict_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_verdict_command[
+        linux_validation_terminal_verdict_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_verdict.md")
+    linux_validation_terminal_verdict_publish_command = command_map[
+        "workflow_linux_validation_terminal_verdict_publish"
+    ]
+    assert linux_validation_terminal_verdict_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_terminal_verdict_publish_gate.py",
+    ]
+    linux_validation_terminal_verdict_publish_report_index = (
+        linux_validation_terminal_verdict_publish_command.index(
+            "--linux-validation-terminal-verdict-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_verdict_publish_command[
+        linux_validation_terminal_verdict_publish_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_verdict.json")
+    linux_validation_terminal_verdict_publish_json_index = (
+        linux_validation_terminal_verdict_publish_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_verdict_publish_command[
+        linux_validation_terminal_verdict_publish_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_verdict_publish.json")
+    linux_validation_terminal_verdict_publish_markdown_index = (
+        linux_validation_terminal_verdict_publish_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_verdict_publish_command[
+        linux_validation_terminal_verdict_publish_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_verdict_publish.md")
+    linux_validation_terminal_dispatch_command = command_map[
+        "workflow_linux_validation_terminal_dispatch"
+    ]
+    assert linux_validation_terminal_dispatch_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_dispatch_gate.py",
+    ]
+    linux_validation_terminal_dispatch_report_index = (
+        linux_validation_terminal_dispatch_command.index(
+            "--linux-validation-terminal-verdict-publish-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_command[
+        linux_validation_terminal_dispatch_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_verdict_publish.json")
+    linux_validation_terminal_dispatch_json_index = (
+        linux_validation_terminal_dispatch_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_dispatch_command[
+        linux_validation_terminal_dispatch_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch.json")
+    linux_validation_terminal_dispatch_markdown_index = (
+        linux_validation_terminal_dispatch_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_dispatch_command[
+        linux_validation_terminal_dispatch_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch.md")
+    linux_validation_terminal_dispatch_execution_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_execution"
+    ]
+    assert linux_validation_terminal_dispatch_execution_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_execution_gate.py",
+    ]
+    linux_validation_terminal_dispatch_execution_report_index = (
+        linux_validation_terminal_dispatch_execution_command.index(
+            "--linux-validation-terminal-dispatch-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_execution_command[
+        linux_validation_terminal_dispatch_execution_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch.json")
+    linux_validation_terminal_dispatch_execution_json_index = (
+        linux_validation_terminal_dispatch_execution_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_dispatch_execution_command[
+        linux_validation_terminal_dispatch_execution_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_execution.json")
+    linux_validation_terminal_dispatch_execution_markdown_index = (
+        linux_validation_terminal_dispatch_execution_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_dispatch_execution_command[
+        linux_validation_terminal_dispatch_execution_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_execution.md")
+    linux_validation_terminal_dispatch_trace_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_trace"
+    ]
+    assert linux_validation_terminal_dispatch_trace_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_trace_gate.py",
+    ]
+    linux_validation_terminal_dispatch_trace_report_index = (
+        linux_validation_terminal_dispatch_trace_command.index(
+            "--linux-validation-terminal-dispatch-execution-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_trace_command[
+        linux_validation_terminal_dispatch_trace_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_execution.json")
+    linux_validation_terminal_dispatch_trace_timeout_index = (
+        linux_validation_terminal_dispatch_trace_command.index("--poll-timeout-seconds") + 1
+    )
+    assert linux_validation_terminal_dispatch_trace_command[
+        linux_validation_terminal_dispatch_trace_timeout_index
+    ] == "240"
+    linux_validation_terminal_dispatch_trace_json_index = (
+        linux_validation_terminal_dispatch_trace_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_dispatch_trace_command[
+        linux_validation_terminal_dispatch_trace_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_trace.json")
+    linux_validation_terminal_dispatch_trace_markdown_index = (
+        linux_validation_terminal_dispatch_trace_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_dispatch_trace_command[
+        linux_validation_terminal_dispatch_trace_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_trace.md")
+    assert "--poll-now" in linux_validation_terminal_dispatch_trace_command
+
+    linux_validation_terminal_dispatch_completion_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_completion"
+    ]
+    assert linux_validation_terminal_dispatch_completion_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_completion_gate.py",
+    ]
+    linux_validation_terminal_dispatch_completion_report_index = (
+        linux_validation_terminal_dispatch_completion_command.index(
+            "--linux-validation-terminal-dispatch-trace-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_completion_command[
+        linux_validation_terminal_dispatch_completion_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_trace.json")
+    linux_validation_terminal_dispatch_completion_interval_index = (
+        linux_validation_terminal_dispatch_completion_command.index("--poll-interval-seconds")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_completion_command[
+        linux_validation_terminal_dispatch_completion_interval_index
+    ] == "15"
+    linux_validation_terminal_dispatch_completion_max_polls_index = (
+        linux_validation_terminal_dispatch_completion_command.index("--max-polls") + 1
+    )
+    assert linux_validation_terminal_dispatch_completion_command[
+        linux_validation_terminal_dispatch_completion_max_polls_index
+    ] == "8"
+    linux_validation_terminal_dispatch_completion_timeout_index = (
+        linux_validation_terminal_dispatch_completion_command.index("--poll-timeout-seconds")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_completion_command[
+        linux_validation_terminal_dispatch_completion_timeout_index
+    ] == "180"
+    linux_validation_terminal_dispatch_completion_json_index = (
+        linux_validation_terminal_dispatch_completion_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_dispatch_completion_command[
+        linux_validation_terminal_dispatch_completion_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_completion.json")
+    linux_validation_terminal_dispatch_completion_markdown_index = (
+        linux_validation_terminal_dispatch_completion_command.index("--output-markdown") + 1
+    )
+    assert linux_validation_terminal_dispatch_completion_command[
+        linux_validation_terminal_dispatch_completion_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_completion.md")
+    assert "--allow-in-progress" in linux_validation_terminal_dispatch_completion_command
+
+    linux_validation_terminal_dispatch_terminal_publish_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_terminal_publish"
+    ]
+    assert linux_validation_terminal_dispatch_terminal_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_terminal_publish_gate.py",
+    ]
+    linux_validation_terminal_dispatch_terminal_publish_report_index = (
+        linux_validation_terminal_dispatch_terminal_publish_command.index(
+            "--linux-validation-terminal-dispatch-completion-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_publish_command[
+        linux_validation_terminal_dispatch_terminal_publish_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_completion.json")
+    linux_validation_terminal_dispatch_terminal_publish_json_index = (
+        linux_validation_terminal_dispatch_terminal_publish_command.index("--output-json")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_publish_command[
+        linux_validation_terminal_dispatch_terminal_publish_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_terminal_publish.json")
+    linux_validation_terminal_dispatch_terminal_publish_markdown_index = (
+        linux_validation_terminal_dispatch_terminal_publish_command.index("--output-markdown")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_publish_command[
+        linux_validation_terminal_dispatch_terminal_publish_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_terminal_publish.md")
+
+    linux_validation_terminal_dispatch_final_verdict_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_final_verdict"
+    ]
+    assert linux_validation_terminal_dispatch_final_verdict_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_final_verdict_gate.py",
+    ]
+    linux_validation_terminal_dispatch_final_verdict_report_index = (
+        linux_validation_terminal_dispatch_final_verdict_command.index(
+            "--linux-validation-terminal-dispatch-terminal-publish-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_verdict_command[
+        linux_validation_terminal_dispatch_final_verdict_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_terminal_publish.json")
+    linux_validation_terminal_dispatch_final_verdict_json_index = (
+        linux_validation_terminal_dispatch_final_verdict_command.index("--output-json")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_verdict_command[
+        linux_validation_terminal_dispatch_final_verdict_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_verdict.json")
+    linux_validation_terminal_dispatch_final_verdict_markdown_index = (
+        linux_validation_terminal_dispatch_final_verdict_command.index("--output-markdown")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_verdict_command[
+        linux_validation_terminal_dispatch_final_verdict_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_verdict.md")
+
+    linux_validation_terminal_dispatch_final_verdict_publish_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_final_verdict_publish"
+    ]
+    assert linux_validation_terminal_dispatch_final_verdict_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_final_verdict_publish_gate.py",
+    ]
+    linux_validation_terminal_dispatch_final_verdict_publish_report_index = (
+        linux_validation_terminal_dispatch_final_verdict_publish_command.index(
+            "--linux-validation-terminal-dispatch-final-verdict-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_verdict_publish_command[
+        linux_validation_terminal_dispatch_final_verdict_publish_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_verdict.json")
+    linux_validation_terminal_dispatch_final_verdict_publish_json_index = (
+        linux_validation_terminal_dispatch_final_verdict_publish_command.index("--output-json")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_verdict_publish_command[
+        linux_validation_terminal_dispatch_final_verdict_publish_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.json")
+    linux_validation_terminal_dispatch_final_verdict_publish_markdown_index = (
+        linux_validation_terminal_dispatch_final_verdict_publish_command.index(
+            "--output-markdown"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_verdict_publish_command[
+        linux_validation_terminal_dispatch_final_verdict_publish_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.md")
+
+    linux_validation_terminal_dispatch_final_publish_archive_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_final_publish_archive"
+    ]
+    assert linux_validation_terminal_dispatch_final_publish_archive_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_final_publish_archive_gate.py",
+    ]
+    linux_validation_terminal_dispatch_final_publish_archive_report_index = (
+        linux_validation_terminal_dispatch_final_publish_archive_command.index(
+            "--linux-validation-terminal-dispatch-final-verdict-publish-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_publish_archive_command[
+        linux_validation_terminal_dispatch_final_publish_archive_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.json")
+    linux_validation_terminal_dispatch_final_publish_archive_json_index = (
+        linux_validation_terminal_dispatch_final_publish_archive_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_dispatch_final_publish_archive_command[
+        linux_validation_terminal_dispatch_final_publish_archive_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.json")
+    linux_validation_terminal_dispatch_final_publish_archive_markdown_index = (
+        linux_validation_terminal_dispatch_final_publish_archive_command.index(
+            "--output-markdown"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_final_publish_archive_command[
+        linux_validation_terminal_dispatch_final_publish_archive_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.md")
+
+    linux_validation_terminal_dispatch_terminal_verdict_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict"
+    ]
+    assert linux_validation_terminal_dispatch_terminal_verdict_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_terminal_verdict_gate.py",
+    ]
+    linux_validation_terminal_dispatch_terminal_verdict_report_index = (
+        linux_validation_terminal_dispatch_terminal_verdict_command.index(
+            "--linux-validation-terminal-dispatch-final-publish-archive-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_verdict_command[
+        linux_validation_terminal_dispatch_terminal_verdict_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.json")
+    linux_validation_terminal_dispatch_terminal_verdict_json_index = (
+        linux_validation_terminal_dispatch_terminal_verdict_command.index("--output-json") + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_verdict_command[
+        linux_validation_terminal_dispatch_terminal_verdict_json_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.json")
+    linux_validation_terminal_dispatch_terminal_verdict_markdown_index = (
+        linux_validation_terminal_dispatch_terminal_verdict_command.index(
+            "--output-markdown"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_verdict_command[
+        linux_validation_terminal_dispatch_terminal_verdict_markdown_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.md")
+    linux_validation_terminal_dispatch_terminal_verdict_publish_command = command_map[
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish"
+    ]
+    assert linux_validation_terminal_dispatch_terminal_verdict_publish_command[:2] == [
+        "python",
+        "scripts/run_p2_lv_td_tverdict_publish_gate.py",
+    ]
+    linux_validation_terminal_dispatch_terminal_verdict_publish_report_index = (
+        linux_validation_terminal_dispatch_terminal_verdict_publish_command.index(
+            "--linux-validation-terminal-dispatch-terminal-verdict-report"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_verdict_publish_command[
+        linux_validation_terminal_dispatch_terminal_verdict_publish_report_index
+    ].endswith("ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.json")
+    linux_validation_terminal_dispatch_terminal_verdict_publish_json_index = (
+        linux_validation_terminal_dispatch_terminal_verdict_publish_command.index("--output-json")
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_verdict_publish_command[
+        linux_validation_terminal_dispatch_terminal_verdict_publish_json_index
+    ].endswith(
+        "ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.json"
+    )
+    linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_index = (
+        linux_validation_terminal_dispatch_terminal_verdict_publish_command.index(
+            "--output-markdown"
+        )
+        + 1
+    )
+    assert linux_validation_terminal_dispatch_terminal_verdict_publish_command[
+        linux_validation_terminal_dispatch_terminal_verdict_publish_markdown_index
+    ].endswith(
+        "ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.md"
+    )
 
 
 def test_build_ci_workflow_pipeline_commands_supports_partial_skip():
@@ -1016,6 +1762,23 @@ def test_build_ci_workflow_pipeline_commands_supports_partial_skip():
         "workflow_terminal_verdict",
         "workflow_linux_validation_dispatch",
         "workflow_linux_validation_verdict",
+        "workflow_linux_validation_verdict_publish",
+        "workflow_linux_validation_terminal_publish",
+        "workflow_linux_validation_final_verdict",
+        "workflow_linux_validation_final_verdict_publish",
+        "workflow_linux_validation_final_publish_archive",
+        "workflow_linux_validation_terminal_verdict",
+        "workflow_linux_validation_terminal_verdict_publish",
+        "workflow_linux_validation_terminal_dispatch",
+        "workflow_linux_validation_terminal_dispatch_execution",
+        "workflow_linux_validation_terminal_dispatch_trace",
+        "workflow_linux_validation_terminal_dispatch_completion",
+        "workflow_linux_validation_terminal_dispatch_terminal_publish",
+        "workflow_linux_validation_terminal_dispatch_final_verdict",
+        "workflow_linux_validation_terminal_dispatch_final_verdict_publish",
+        "workflow_linux_validation_terminal_dispatch_final_publish_archive",
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict",
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish",
     ]
 
 
@@ -1063,6 +1826,24 @@ def test_build_ci_workflow_pipeline_commands_skip_all_returns_empty_plan():
         skip_gate_manifest_drift=True,
         skip_terminal_verdict=True,
         skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish=True,
     )
     assert commands == []
 
@@ -2547,6 +3328,12 @@ def test_build_ci_workflow_pipeline_commands_supports_terminal_verdict_only_stag
         skip_terminal_verdict=False,
         skip_linux_validation_dispatch=True,
         skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
     )
     assert [stage for stage, _ in commands] == ["workflow_terminal_verdict"]
 
@@ -2596,6 +3383,11 @@ def test_build_ci_workflow_pipeline_commands_supports_linux_validation_dispatch_
         skip_terminal_verdict=True,
         skip_linux_validation_dispatch=False,
         skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
     )
     assert [stage for stage, _ in commands] == ["workflow_linux_validation_dispatch"]
 
@@ -2645,13 +3437,1127 @@ def test_build_ci_workflow_pipeline_commands_supports_linux_validation_verdict_o
         skip_terminal_verdict=True,
         skip_linux_validation_dispatch=True,
         skip_linux_validation_verdict=False,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
     )
     assert [stage for stage, _ in commands] == ["workflow_linux_validation_verdict"]
 
 
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_verdict_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=False,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == ["workflow_linux_validation_verdict_publish"]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=False,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == ["workflow_linux_validation_terminal_publish"]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_final_verdict_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=False,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == ["workflow_linux_validation_final_verdict"]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_final_verdict_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=False,
+        skip_linux_validation_final_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_final_verdict_publish"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_final_publish_archive_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=False,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_final_publish_archive"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_verdict_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=False,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_verdict"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_verdict_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=False,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_verdict_publish"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=False,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_execution_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=False,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_execution"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_trace_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=False,
+        skip_linux_validation_terminal_dispatch_completion=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_trace"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_completion_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=False,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_completion"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_terminal_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=False,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_terminal_publish"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_final_verdict_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=False,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_final_verdict"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_final_verdict_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=False,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_final_verdict_publish"
+    ]
+
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_final_publish_archive_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=False,
+        skip_linux_validation_terminal_dispatch_terminal_verdict=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_final_publish_archive"
+    ]
 
 
 
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_terminal_verdict_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict=False,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict"
+    ]
 
 
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_terminal_verdict_publish_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish=False,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive=True,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish"
+    ]
 
+
+def test_build_ci_workflow_pipeline_commands_supports_linux_validation_terminal_dispatch_terminal_verdict_publish_archive_only_stage():
+    commands = _build_commands(
+        skip_plan=True,
+        skip_yaml=True,
+        skip_sync=True,
+        skip_command_guard=True,
+        skip_governance=True,
+        skip_governance_publish=True,
+        skip_decision=True,
+        skip_dispatch=True,
+        skip_dispatch_execution=True,
+        skip_dispatch_trace=True,
+        skip_dispatch_completion=True,
+        skip_dispatch_terminal_publish=True,
+        skip_dispatch_release_handoff=True,
+        skip_release_trigger=True,
+        skip_release_trace=True,
+        skip_release_completion=True,
+        skip_release_terminal_publish=True,
+        skip_release_finalization=True,
+        skip_release_closure=True,
+        skip_release_archive=True,
+        skip_release_verdict=True,
+        skip_release_incident=True,
+        skip_release_terminal_verdict=True,
+        skip_release_delivery=True,
+        skip_release_delivery_terminal_publish=True,
+        skip_release_delivery_final_verdict=True,
+        skip_release_follow_up_dispatch=True,
+        skip_release_follow_up_closure=True,
+        skip_release_follow_up_terminal_publish=True,
+        skip_release_follow_up_final_verdict=True,
+        skip_release_final_outcome=True,
+        skip_release_final_terminal_publish=True,
+        skip_release_final_handoff=True,
+        skip_release_final_closure=True,
+        skip_release_final_closure_publish=True,
+        skip_release_final_archive=True,
+        skip_release_final_verdict=True,
+        skip_release_final_verdict_publish=True,
+        skip_release_final_publish_archive=True,
+        skip_gate_manifest_drift=True,
+        skip_terminal_verdict=True,
+        skip_linux_validation_dispatch=True,
+        skip_linux_validation_verdict=True,
+        skip_linux_validation_verdict_publish=True,
+        skip_linux_validation_terminal_publish=True,
+        skip_linux_validation_final_verdict=True,
+        skip_linux_validation_final_verdict_publish=True,
+        skip_linux_validation_final_publish_archive=True,
+        skip_linux_validation_terminal_verdict=True,
+        skip_linux_validation_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch=True,
+        skip_linux_validation_terminal_dispatch_execution=True,
+        skip_linux_validation_terminal_dispatch_trace=True,
+        skip_linux_validation_terminal_dispatch_completion=True,
+        skip_linux_validation_terminal_dispatch_terminal_publish=True,
+        skip_linux_validation_terminal_dispatch_final_verdict=True,
+        skip_linux_validation_terminal_dispatch_final_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_final_publish_archive=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish=True,
+        skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive=False,
+    )
+    assert [stage for stage, _ in commands] == [
+        "workflow_linux_validation_terminal_dispatch_terminal_verdict_publish_archive"
+    ]

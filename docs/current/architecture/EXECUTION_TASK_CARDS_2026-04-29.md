@@ -134,9 +134,28 @@ P2-01 Agent Supervisor
   -> P2-55 Linux CI Workflow Release Final Verdict Publish Gate
   -> P2-56 Linux CI Workflow Release Final Publish Archive Gate
   -> P2-57 Linux Gate Manifest Drift Closure Gate
+  -> P2-58 Linux CI Workflow Pipeline Closure to P2-57 Gate
   -> P2-59 Linux CI Workflow Terminal Verdict Closure Gate
   -> P2-60 Linux CI Workflow Linux Validation Dispatch Gate
   -> P2-61 Linux CI Workflow Linux Validation Verdict Gate
+  -> P2-62 Linux CI Workflow Linux Validation Verdict Publish Gate
+  -> P2-63 Linux CI Workflow Linux Validation Terminal Publish Gate
+  -> P2-64 Linux CI Workflow Linux Validation Final Verdict Gate
+  -> P2-65 Linux CI Workflow Linux Validation Final Verdict Publish Gate
+  -> P2-66 Linux CI Workflow Linux Validation Final Publish Archive Gate
+  -> P2-67 Linux CI Workflow Linux Validation Terminal Verdict Gate
+  -> P2-68 Linux CI Workflow Linux Validation Terminal Verdict Publish Gate
+  -> P2-69 Linux CI Workflow Linux Validation Terminal Dispatch Gate
+  -> P2-70 Linux CI Workflow Linux Validation Terminal Dispatch Execution Gate
+  -> P2-71 Linux CI Workflow Linux Validation Terminal Dispatch Trace Gate
+  -> P2-72 Linux CI Workflow Linux Validation Terminal Dispatch Completion Gate
+  -> P2-73 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Publish Gate
+  -> P2-74 Linux CI Workflow Linux Validation Terminal Dispatch Final Verdict Gate
+  -> P2-75 Linux CI Workflow Linux Validation Terminal Dispatch Final Verdict Publish Gate
+  -> P2-76 Linux CI Workflow Linux Validation Terminal Dispatch Final Publish Archive Gate
+  -> P2-77 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Gate
+  -> P2-78 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Publish Gate
+  -> P2-79 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Publish Archive Gate
 ```
 
 ## 5. Phase 0 浠诲姟鍗″崟
@@ -1508,6 +1527,34 @@ P2-01 Agent Supervisor
   - `T4`: GitHub output fields expose status and drift counters.
 - Depends on: `P2-56`
 
+## P2-58 Linux CI Workflow Pipeline Closure to P2-57
+- Card ID: `P2-58`
+- Priority: `P2`
+- Problem:
+  - `P2-57` introduces a dedicated drift-closure contract, but the Linux CI workflow pipeline gate still needs one canonical orchestration stage so full-chain execution can consume that contract without ad-hoc wiring.
+  - Without explicit pipeline closure, downstream users can skip drift validation by accident or lose report-path consistency across dry-run and CI stages.
+- Scope:
+  - Extend `P2-26` pipeline orchestration (`P2-17 -> ...`) to include one dedicated manifest-drift stage:
+    - stage name: `workflow_gate_manifest_drift`
+    - command: `scripts/run_p2_linux_gate_manifest_drift_gate.py`
+  - Add normalized pipeline outputs:
+    - `--gate-manifest-drift-json-output`
+    - `--gate-manifest-drift-markdown-output`
+  - Add skip-control flag:
+    - `--skip-gate-manifest-drift`
+  - Keep existing stage ordering and compatibility for all previous skip combinations.
+- Implementation:
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: default pipeline includes `workflow_gate_manifest_drift` after release final publish archive stage and before terminal verdict stage.
+  - `T2`: command arguments include both drift output paths and point to `scripts/run_p2_linux_gate_manifest_drift_gate.py`.
+  - `T3`: skip matrix propagates `skip_gate_manifest_drift` correctly in partial-chain and skip-all scenarios.
+  - `T4`: P2-57-only path remains reproducible via pipeline skip switches.
+- Depends on: `P2-57`
+
 ## P2-59 Linux CI Workflow Terminal Verdict Closure Gate
 - Card ID: `P2-59`
 - Priority: `P2`
@@ -1559,8 +1606,8 @@ P2-01 Agent Supervisor
     - optional override: `--linux-validation-command`
   - Export `--github-output` fields for CI consumers.
 - Implementation:
-  - `scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py`
-  - `tests/test_p2_linux_ci_workflow_linux_validation_dispatch_gate_runtime.py`
+  - `scripts/run_p2_lv_dispatch_gate.py`
+  - `tests/test_p2_lv_dispatch_rt.py`
   - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
   - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
   - `scripts/run_linux_unified_gate.py`
@@ -1593,8 +1640,8 @@ P2-01 Agent Supervisor
     - timeout control: `--linux-validation-verdict-timeout-seconds`
   - Export `--github-output` fields for CI consumers.
 - Implementation:
-  - `scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py`
-  - `tests/test_p2_linux_ci_workflow_linux_validation_verdict_gate_runtime.py`
+  - `scripts/run_p2_lv_verdict_gate.py`
+  - `tests/test_p2_lv_verdict_rt.py`
   - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
   - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
   - `scripts/run_linux_unified_gate.py`
@@ -1607,6 +1654,575 @@ P2-01 Agent Supervisor
   - `T4`: dispatch=`dispatch_failed` converges to `validation_failed` + `escalate_linux_validation_failure`; any contract mismatch/drift/evidence issue converges to `contract_failed` + `abort_linux_validation_verdict`.
   - `T5`: GitHub output includes verdict status/decision/exit_code/passed+manual-action/channel/dispatch status+decision/report paths.
 - Depends on: `P2-60`
+
+## P2-62 Linux CI Workflow Linux Validation Verdict Publish Gate
+- Card ID: `P2-62`
+- Priority: `P2`
+- Problem:
+  - `P2-61` converges Linux validation execution into one verdict contract, but Linux CI still lacks a dedicated publish contract that downstream release governance can consume without re-parsing verdict internals.
+  - Without a publish gate, status handling for `validated/validated_with_follow_up/validation_failed/blocked/contract_failed` can drift across dashboards, notifications, and final closure pipelines.
+- Scope:
+  - Add one Linux validation verdict publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict.json` (`P2-61`)
+  - Emit normalized outputs:
+    - `linux_validation_verdict_publish_status` (`published`/`published_with_follow_up`/`blocked`/`contract_failed`)
+    - `linux_validation_verdict_publish_decision` (`announce_linux_validation_passed`/`announce_linux_validation_passed_with_follow_up`/`announce_linux_validation_blocker`/`abort_publish`)
+    - `linux_validation_verdict_publish_exit_code`
+    - `linux_validation_verdict_publish_should_notify` / `linux_validation_verdict_publish_requires_manual_action` / `linux_validation_verdict_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_verdict_publish_gate.py`
+  - `tests/test_p2_lv_verdict_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: verdict=`validated` converges to `published` + `announce_linux_validation_passed`.
+  - `T2`: verdict=`validated_with_follow_up` converges to `published_with_follow_up` + `announce_linux_validation_passed_with_follow_up`.
+  - `T3`: verdict=`blocked` converges to `blocked` + `announce_linux_validation_blocker`.
+  - `T4`: verdict contract mismatch/evidence issue converges to `contract_failed` + `abort_publish`.
+  - `T5`: GitHub output includes publish status/decision/exit_code/notify+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-61`
+
+## P2-63 Linux CI Workflow Linux Validation Terminal Publish Gate
+- Card ID: `P2-63`
+- Priority: `P2`
+- Problem:
+  - `P2-62` converges Linux validation verdict publish behavior, but Linux CI still lacks one terminal publish contract that downstream release closure can consume without re-parsing publish internals.
+  - Without a terminal publish artifact, handling for `published/published_with_follow_up/blocked/contract_failed` can drift across notification channels, observability endpoints, and handoff automation.
+- Scope:
+  - Add one Linux validation terminal publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_verdict_publish.json` (`P2-62`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_publish_status` (`terminal_published`/`terminal_published_with_follow_up`/`terminal_blocked`/`terminal_contract_failed`)
+    - `linux_validation_terminal_publish_decision` (`announce_linux_validation_terminal_passed`/`announce_linux_validation_terminal_passed_with_follow_up`/`announce_linux_validation_terminal_blocker`/`abort_terminal_publish`)
+    - `linux_validation_terminal_publish_exit_code`
+    - `linux_validation_terminal_publish_should_notify` / `linux_validation_terminal_publish_ready_for_handoff` / `linux_validation_terminal_publish_requires_manual_action` / `linux_validation_terminal_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_terminal_publish_gate.py`
+  - `tests/test_p2_lv_terminal_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: verdict publish=`published` converges to `terminal_published` + `announce_linux_validation_terminal_passed`.
+  - `T2`: verdict publish=`published_with_follow_up` converges to `terminal_published_with_follow_up` + `announce_linux_validation_terminal_passed_with_follow_up`.
+  - `T3`: verdict publish=`blocked` converges to `terminal_blocked` + `announce_linux_validation_terminal_blocker`.
+  - `T4`: verdict publish contract mismatch/evidence issue converges to `terminal_contract_failed` + `abort_terminal_publish`.
+  - `T5`: GitHub output includes terminal publish status/decision/exit_code/notify+handoff+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-62`
+
+## P2-64 Linux CI Workflow Linux Validation Final Verdict Gate
+- Card ID: `P2-64`
+- Priority: `P2`
+- Problem:
+  - `P2-63` converges Linux validation terminal publish behavior, but Linux CI still lacks one final verdict contract that downstream release closure and observability consumers can read without re-parsing terminal publish internals.
+  - Without one final Linux-validation verdict artifact, status handling for `terminal_published/terminal_published_with_follow_up/terminal_blocked/terminal_contract_failed` can drift across release closure automation, notifications, and manual escalation paths.
+- Scope:
+  - Add one Linux validation final verdict gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_publish.json` (`P2-63`)
+  - Emit normalized outputs:
+    - `linux_validation_final_verdict_status` (`validated`/`validated_with_follow_up`/`blocked`/`contract_failed`)
+    - `linux_validation_final_verdict_decision` (`accept_linux_validation_terminal`/`accept_linux_validation_terminal_with_follow_up`/`escalate_linux_validation_terminal_blocker`/`abort_linux_validation_terminal_verdict`)
+    - `linux_validation_final_verdict_exit_code`
+    - `linux_validation_final_should_accept` / `linux_validation_final_requires_follow_up` / `linux_validation_final_should_page_owner` / `linux_validation_final_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_final_verdict_gate.py`
+  - `tests/test_p2_lv_final_verdict_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: terminal publish=`terminal_published` converges to `validated` + `accept_linux_validation_terminal`.
+  - `T2`: terminal publish=`terminal_published_with_follow_up` converges to `validated_with_follow_up` + `accept_linux_validation_terminal_with_follow_up`.
+  - `T3`: terminal publish=`terminal_blocked` converges to `blocked` + `escalate_linux_validation_terminal_blocker`.
+  - `T4`: terminal publish contract mismatch/evidence issue converges to `contract_failed` + `abort_linux_validation_terminal_verdict`.
+  - `T5`: GitHub output includes final verdict status/decision/exit_code/accept+follow-up+page-owner/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-63`
+
+## P2-65 Linux CI Workflow Linux Validation Final Verdict Publish Gate
+- Card ID: `P2-65`
+- Priority: `P2`
+- Problem:
+  - `P2-64` converges Linux validation into one final verdict contract, but Linux CI still lacks one final publish contract that downstream release closure, observability, and incident routing consumers can ingest without re-parsing final-verdict internals.
+  - Without a dedicated publish artifact for final Linux-validation verdict, handling for `validated/validated_with_follow_up/blocked/contract_failed` can drift across notification channels and manual escalation automation.
+- Scope:
+  - Add one Linux validation final verdict publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict.json` (`P2-64`)
+  - Emit normalized outputs:
+    - `linux_validation_final_verdict_publish_status` (`published`/`published_with_follow_up`/`blocked`/`contract_failed`)
+    - `linux_validation_final_verdict_publish_decision` (`announce_linux_validation_final_validated`/`announce_linux_validation_final_validated_with_follow_up`/`announce_linux_validation_final_blocker`/`abort_publish`)
+    - `linux_validation_final_verdict_publish_exit_code`
+    - `linux_validation_final_verdict_publish_should_notify` / `linux_validation_final_verdict_publish_requires_manual_action` / `linux_validation_final_verdict_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_final_verdict_publish_gate.py`
+  - `tests/test_p2_lv_final_verdict_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: final verdict=`validated` converges to `published` + `announce_linux_validation_final_validated`.
+  - `T2`: final verdict=`validated_with_follow_up` converges to `published_with_follow_up` + `announce_linux_validation_final_validated_with_follow_up`.
+  - `T3`: final verdict=`blocked` converges to `blocked` + `announce_linux_validation_final_blocker`.
+  - `T4`: final verdict contract mismatch/evidence issue converges to `contract_failed` + `abort_publish`.
+  - `T5`: GitHub output includes publish status/decision/exit_code/notify+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-64`
+
+## P2-66 Linux CI Workflow Linux Validation Final Publish Archive Gate
+- Card ID: `P2-66`
+- Priority: `P2`
+- Problem:
+  - `P2-65` already converges Linux validation final verdict publish behavior, but Linux CI still lacks one terminal archive contract for downstream release closure and audit consumers.
+  - Without a dedicated final-publish-archive artifact, handling for `published/published_with_follow_up/blocked/contract_failed` can drift across archive/manual-action and follow-up routing automation.
+- Scope:
+  - Add one Linux validation final publish archive gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_verdict_publish.json` (`P2-65`)
+  - Emit normalized outputs:
+    - `linux_validation_final_publish_archive_status` (`archived`/`archived_with_follow_up`/`blocked`/`contract_failed`)
+    - `linux_validation_final_publish_archive_decision` (`archive_release_shipped`/`archive_release_shipped_with_follow_up`/`archive_release_blocker`/`abort_archive`)
+    - `linux_validation_final_publish_archive_exit_code`
+    - `linux_validation_final_publish_archive_should_archive` / `linux_validation_final_publish_archive_requires_manual_action` / `linux_validation_final_publish_archive_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_final_publish_archive_gate.py`
+  - `tests/test_p2_lv_final_publish_archive_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: final verdict publish=`published` converges to `archived` + `archive_release_shipped`.
+  - `T2`: final verdict publish=`published_with_follow_up` converges to `archived_with_follow_up` + `archive_release_shipped_with_follow_up`.
+  - `T3`: final verdict publish=`blocked` converges to `blocked` + `archive_release_blocker`.
+  - `T4`: publish contract mismatch/evidence issue converges to `contract_failed` + `abort_archive`.
+  - `T5`: GitHub output includes archive status/decision/exit_code/archive+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-65`
+
+## P2-67 Linux CI Workflow Linux Validation Terminal Verdict Gate
+- Card ID: `P2-67`
+- Priority: `P2`
+- Problem:
+  - `P2-66` converges Linux validation final publish archive behavior, but Linux CI still lacks one terminal verdict contract for downstream Linux-stage orchestration consumers.
+  - Without a dedicated terminal-verdict artifact, handling for `archived/archived_with_follow_up/blocked/contract_failed` can drift across final Linux validation dispatch policies and manual escalation paths.
+- Scope:
+  - Add one Linux validation terminal verdict gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_final_publish_archive.json` (`P2-66`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_verdict_status` (`ready_for_linux_validation`/`ready_with_follow_up_for_linux_validation`/`blocked`/`contract_failed`)
+    - `linux_validation_terminal_verdict_decision` (`proceed_linux_validation`/`proceed_linux_validation_with_follow_up`/`halt_linux_validation_blocker`/`abort_linux_validation`)
+    - `linux_validation_terminal_verdict_exit_code`
+    - `linux_validation_terminal_verdict_should_proceed` / `linux_validation_terminal_verdict_requires_manual_action` / `linux_validation_terminal_verdict_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_terminal_verdict_gate.py`
+  - `tests/test_p2_lv_terminal_verdict_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: final publish archive=`archived` converges to `ready_for_linux_validation` + `proceed_linux_validation`.
+  - `T2`: final publish archive=`archived_with_follow_up` converges to `ready_with_follow_up_for_linux_validation` + `proceed_linux_validation_with_follow_up`.
+  - `T3`: final publish archive=`blocked` converges to `blocked` + `halt_linux_validation_blocker`.
+  - `T4`: final publish archive contract mismatch/evidence issue converges to `contract_failed` + `abort_linux_validation`.
+  - `T5`: GitHub output includes terminal verdict status/decision/exit_code/proceed+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-66`
+
+## P2-68 Linux CI Workflow Linux Validation Terminal Verdict Publish Gate
+- Card ID: `P2-68`
+- Priority: `P2`
+- Problem:
+  - `P2-67` converges Linux validation to one terminal verdict contract, but Linux CI still lacks a dedicated publish artifact that downstream dashboards and cross-pipeline consumers can subscribe to directly.
+  - Without a terminal-verdict publish contract, handling for `ready_for_linux_validation/ready_with_follow_up_for_linux_validation/blocked/contract_failed` can drift across notification, follow-up routing, and blocker escalation automation.
+- Scope:
+  - Add one Linux validation terminal verdict publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict.json` (`P2-67`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_verdict_publish_status` (`published`/`published_with_follow_up`/`blocked`/`contract_failed`)
+    - `linux_validation_terminal_verdict_publish_decision` (`announce_linux_validation_terminal_ready`/`announce_linux_validation_terminal_ready_with_follow_up`/`announce_linux_validation_terminal_blocker`/`abort_publish`)
+    - `linux_validation_terminal_verdict_publish_exit_code`
+    - `linux_validation_terminal_verdict_publish_should_notify` / `linux_validation_terminal_verdict_publish_requires_manual_action` / `linux_validation_terminal_verdict_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_terminal_verdict_publish_gate.py`
+  - `tests/test_p2_lv_terminal_verdict_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: terminal verdict=`ready_for_linux_validation` converges to `published` + `announce_linux_validation_terminal_ready`.
+  - `T2`: terminal verdict=`ready_with_follow_up_for_linux_validation` converges to `published_with_follow_up` + `announce_linux_validation_terminal_ready_with_follow_up`.
+  - `T3`: terminal verdict=`blocked` converges to `blocked` + `announce_linux_validation_terminal_blocker`.
+  - `T4`: terminal verdict contract mismatch/evidence issue converges to `contract_failed` + `abort_publish`.
+  - `T5`: GitHub output includes terminal verdict publish status/decision/exit_code/notify+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-67`
+
+## P2-69 Linux CI Workflow Linux Validation Terminal Dispatch Gate
+- Card ID: `P2-69`
+- Priority: `P2`
+- Problem:
+  - `P2-68` converges Linux validation terminal verdict publish behavior, but Linux CI still lacks one terminal dispatch contract for downstream Linux-stage dry-run orchestration consumers.
+  - Without a dedicated terminal-dispatch artifact, handling for `published/published_with_follow_up/blocked/contract_failed` can drift across dispatch readiness, follow-up routing, and blocker escalation paths.
+- Scope:
+  - Add one Linux validation terminal dispatch gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_verdict_publish.json` (`P2-68`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_status` (`ready_dry_run`/`ready_with_follow_up_dry_run`/`blocked`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_decision` (`dispatch_linux_validation_terminal`/`dispatch_linux_validation_terminal_with_follow_up`/`hold_linux_validation_terminal_blocker`/`abort_linux_validation_terminal_dispatch`)
+    - `linux_validation_terminal_dispatch_exit_code`
+    - `linux_validation_terminal_should_dispatch` / `linux_validation_terminal_dispatch_requires_manual_action` / `linux_validation_terminal_dispatch_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_dispatch_gate.py`
+  - `tests/test_p2_lv_td_dispatch_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: terminal verdict publish=`published` converges to `ready_dry_run` + `dispatch_linux_validation_terminal`.
+  - `T2`: terminal verdict publish=`published_with_follow_up` converges to `ready_with_follow_up_dry_run` + `dispatch_linux_validation_terminal_with_follow_up`.
+  - `T3`: terminal verdict publish=`blocked` converges to `blocked` + `hold_linux_validation_terminal_blocker`.
+  - `T4`: terminal verdict publish contract mismatch/evidence issue converges to `contract_failed` + `abort_linux_validation_terminal_dispatch`.
+  - `T5`: GitHub output includes terminal dispatch status/decision/exit_code/dispatch+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-68`
+
+## P2-70 Linux CI Workflow Linux Validation Terminal Dispatch Execution Gate
+- Card ID: `P2-70`
+- Priority: `P2`
+- Problem:
+  - `P2-69` converges Linux validation terminal dispatch readiness behavior, but Linux CI still lacks one execution contract that records terminal dispatch attempt outcomes for Linux-stage orchestration and incident routing consumers.
+  - Without a dedicated terminal-dispatch execution artifact, handling for `ready_dry_run/ready_with_follow_up_dry_run/blocked/contract_failed` can drift when converting readiness into `dispatched/dispatch_failed` runtime outcomes.
+- Scope:
+  - Add one Linux validation terminal dispatch execution gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch.json` (`P2-69`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_execution_status` (`ready_dry_run`/`ready_with_follow_up_dry_run`/`dispatched`/`dispatch_failed`/`blocked`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_execution_decision` (`dispatch_linux_validation_terminal`/`dispatch_linux_validation_terminal_with_follow_up`/`hold_linux_validation_terminal_blocker`/`abort_linux_validation_terminal_dispatch`)
+    - `linux_validation_terminal_dispatch_execution_exit_code`
+    - `linux_validation_terminal_dispatch_attempted` / `linux_validation_terminal_dispatch_execution_requires_manual_action` / `linux_validation_terminal_dispatch_execution_channel`
+  - Support optional command execution with timeout control:
+    - default command: `python scripts/run_p2_linux_unified_pipeline_gate.py --continue-on-failure`
+    - optional override: `--linux-validation-terminal-command`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_execution_gate.py`
+  - `tests/test_p2_lv_td_execution_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: terminal dispatch=`ready_dry_run` converges to execution=`ready_dry_run` + `dispatch_linux_validation_terminal` in dry-run mode.
+  - `T2`: terminal dispatch=`ready_with_follow_up_dry_run` with successful command converges to execution=`dispatched` + `dispatch_linux_validation_terminal_with_follow_up`.
+  - `T3`: terminal dispatch=`blocked` converges to execution=`blocked` + `hold_linux_validation_terminal_blocker`.
+  - `T4`: terminal dispatch contract mismatch is rejected at load boundary; runtime command failure converges to execution=`dispatch_failed`.
+  - `T5`: GitHub output includes execution status/decision/exit_code/attempted+manual-action/channel/run-id/run-url/follow-up/report paths.
+- Depends on: `P2-69`
+
+## P2-71 Linux CI Workflow Linux Validation Terminal Dispatch Trace Gate
+- Card ID: `P2-71`
+- Priority: `P2`
+- Problem:
+  - `P2-70` records Linux validation terminal dispatch execution outcomes, but Linux CI still lacks one standardized trace artifact for run-reference extraction and poll-ready tracking handoff.
+  - Without a dedicated terminal-dispatch trace contract, run-state transitions (`tracking_ready`/`poll_failed`/`in_progress`/`completed`) can drift across downstream observability, incident, and handoff consumers.
+- Scope:
+  - Add one Linux validation terminal dispatch trace gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_execution.json` (`P2-70`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_trace_status` (`ready_dry_run`/`ready_with_follow_up_dry_run`/`dispatch_failed`/`blocked`/`contract_failed`/`run_tracking_ready`/`run_tracking_missing`/`run_poll_failed`/`run_in_progress`/`run_completed_success`/`run_completed_failure`)
+    - `linux_validation_terminal_dispatch_trace_exit_code`
+    - `linux_validation_terminal_should_poll_workflow_run` / `linux_validation_terminal_poll_attempted`
+    - run reference fields (`linux_validation_terminal_run_id` / `linux_validation_terminal_run_url` / `linux_validation_terminal_repo_owner` / `linux_validation_terminal_repo_name`)
+  - Support optional immediate poll execution:
+    - `--poll-now` + `--poll-timeout-seconds`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_trace_gate.py`
+  - `tests/test_p2_lv_td_trace_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: execution=`dispatched` with run URL converges to `run_tracking_ready` and emits poll command contract.
+  - `T2`: execution=`dispatched` without run URL converges to `run_tracking_missing`.
+  - `T3`: execution=`dispatch_failed` keeps non-polling failure passthrough contract.
+  - `T4`: execution payload contract mismatch is rejected at load boundary.
+  - `T5`: GitHub output includes trace status/exit_code/should-poll/run-id/run-url/poll status + report paths.
+- Depends on: `P2-70`
+
+## P2-72 Linux CI Workflow Linux Validation Terminal Dispatch Completion Gate
+- Card ID: `P2-72`
+- Priority: `P2`
+- Problem:
+  - `P2-71` converges Linux validation terminal dispatch trace behavior, but Linux CI still lacks one terminal completion-await contract that standardizes poll-loop outcomes for downstream handoff and closure consumers.
+  - Without a dedicated terminal-dispatch completion artifact, transitions (`in_progress`/`completed`/`poll_failed`/`await_timeout`) can drift across Linux-stage final orchestration and escalation routing.
+- Scope:
+  - Add one Linux validation terminal dispatch completion gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_trace.json` (`P2-71`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_completion_status` (`ready_dry_run`/`ready_with_follow_up_dry_run`/`dispatch_failed`/`blocked`/`contract_failed`/`run_tracking_missing`/`run_poll_failed`/`run_in_progress`/`run_completed_success`/`run_completed_failure`/`run_await_timeout`)
+    - `linux_validation_terminal_dispatch_completion_exit_code`
+    - `poll_attempted` / `poll_iterations` / poll result fields (`poll_status` / `poll_conclusion` / `poll_url` / `poll_error_type`)
+  - Support poll-await behavior:
+    - `--poll-interval-seconds` + `--max-polls` + `--poll-timeout-seconds`
+    - optional `--allow-in-progress` for non-blocking in-progress outcomes
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_completion_gate.py`
+  - `tests/test_p2_lv_td_completion_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: trace=`run_tracking_ready` with successful completion poll converges to `run_completed_success`.
+  - `T2`: trace=`run_tracking_ready` with repeated `in_progress` poll until max attempts converges to `run_await_timeout` (or non-blocking via `--allow-in-progress`).
+  - `T3`: trace payload in non-polling terminal states keeps passthrough completion contract.
+  - `T4`: trace poll command contract mismatch is rejected at load boundary.
+  - `T5`: GitHub output includes completion status/exit_code/poll-attempted/poll-iterations/run-id/run-url/reason-codes/report paths.
+- Depends on: `P2-71`
+
+## P2-73 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Publish Gate
+- Card ID: `P2-73`
+- Priority: `P2`
+- Problem:
+  - `P2-72` converges Linux validation terminal dispatch completion await behavior, but Linux CI still lacks one terminal publish contract that standardizes downstream handoff-ready notification semantics.
+  - Without a dedicated terminal-dispatch terminal-publish artifact, handling for `run_completed_success`/`run_in_progress`/`run_await_timeout`/`run_completed_failure` can drift across Linux-stage closure, follow-up routing, and blocker escalation consumers.
+- Scope:
+  - Add one Linux validation terminal dispatch terminal publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_completion.json` (`P2-72`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_terminal_publish_status` (`terminal_published`/`terminal_published_with_follow_up`/`terminal_in_progress`/`terminal_blocked`/`terminal_failed`/`terminal_contract_failed`)
+    - `linux_validation_terminal_dispatch_terminal_publish_decision` (`announce_linux_validation_terminal_dispatch_completed`/`announce_linux_validation_terminal_dispatch_completed_with_follow_up`/`announce_linux_validation_terminal_dispatch_in_progress`/`announce_linux_validation_terminal_dispatch_blocker`/`announce_linux_validation_terminal_dispatch_failed`/`abort_linux_validation_terminal_dispatch_terminal_publish`)
+    - `linux_validation_terminal_dispatch_terminal_publish_exit_code`
+    - `linux_validation_terminal_dispatch_terminal_publish_should_notify` / `linux_validation_terminal_dispatch_terminal_publish_ready_for_handoff` / `linux_validation_terminal_dispatch_terminal_publish_requires_manual_action` / `linux_validation_terminal_dispatch_terminal_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_terminal_publish_gate.py`
+  - `tests/test_p2_lv_td_terminal_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: completion=`run_completed_success` converges to `terminal_published` + `announce_linux_validation_terminal_dispatch_completed`.
+  - `T2`: completion=`run_await_timeout` with allow-in-progress converges to `terminal_in_progress` + `announce_linux_validation_terminal_dispatch_in_progress`.
+  - `T3`: completion status/exit-code mismatch converges to `terminal_contract_failed`.
+  - `T4`: follow-up dispatch completion (`*_with_follow_up`) converges to `terminal_published_with_follow_up`.
+  - `T5`: GitHub output includes status/decision/exit_code/notify+handoff+manual-action/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-72`
+
+## P2-74 Linux CI Workflow Linux Validation Terminal Dispatch Final Verdict Gate
+- Card ID: `P2-74`
+- Priority: `P2`
+- Problem:
+  - `P2-73` converges Linux validation terminal dispatch completion behavior into one terminal publish contract, but Linux CI still lacks one final verdict contract that downstream release closure and audit consumers can read without re-parsing terminal-publish internals.
+  - Without a dedicated terminal-dispatch final-verdict artifact, handling for `terminal_published`/`terminal_in_progress`/`terminal_failed` can drift across Linux-stage acceptance, follow-up routing, and blocker escalation paths.
+- Scope:
+  - Add one Linux validation terminal dispatch final verdict gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_publish.json` (`P2-73`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_final_verdict_status` (`validated`/`validated_with_follow_up`/`in_progress`/`blocked`/`failed`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_final_verdict_decision` (`accept_linux_validation_terminal_dispatch`/`accept_linux_validation_terminal_dispatch_with_follow_up`/`keep_linux_validation_terminal_dispatch_in_progress`/`escalate_linux_validation_terminal_dispatch_blocker`/`escalate_linux_validation_terminal_dispatch_failure`/`abort_linux_validation_terminal_dispatch_final_verdict`)
+    - `linux_validation_terminal_dispatch_final_verdict_exit_code`
+    - `linux_validation_terminal_dispatch_final_should_accept` / `linux_validation_terminal_dispatch_final_requires_follow_up` / `linux_validation_terminal_dispatch_final_should_page_owner` / `linux_validation_terminal_dispatch_final_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_final_verdict_gate.py`
+  - `tests/test_p2_lv_td_final_verdict_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: terminal publish=`terminal_published` converges to `validated` + `accept_linux_validation_terminal_dispatch`.
+  - `T2`: terminal publish=`terminal_published_with_follow_up` converges to `validated_with_follow_up` + `accept_linux_validation_terminal_dispatch_with_follow_up`.
+  - `T3`: terminal publish=`terminal_blocked` converges to `blocked` + `escalate_linux_validation_terminal_dispatch_blocker`.
+  - `T4`: terminal publish contract mismatch converges to `contract_failed` + `abort_linux_validation_terminal_dispatch_final_verdict`.
+  - `T5`: GitHub output includes status/decision/exit_code/accept+follow-up+page-owner/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-73`
+
+## P2-75 Linux CI Workflow Linux Validation Terminal Dispatch Final Verdict Publish Gate
+- Card ID: `P2-75`
+- Priority: `P2`
+- Problem:
+  - `P2-74` converges Linux validation terminal dispatch completion chain into one final verdict contract, but Linux CI still lacks one publish contract that terminally announces validated/in-progress/blocked/failed outcomes for downstream consumers.
+  - Without a dedicated final-verdict-publish artifact, notification, manual-action, and escalation semantics can drift across Linux-stage closure and operational handoff paths.
+- Scope:
+  - Add one Linux validation terminal dispatch final verdict publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict.json` (`P2-74`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_final_verdict_publish_status` (`published`/`published_with_follow_up`/`in_progress`/`blocked`/`failed`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_final_verdict_publish_decision` (`announce_linux_validation_terminal_dispatch_validated`/`announce_linux_validation_terminal_dispatch_validated_with_follow_up`/`announce_linux_validation_terminal_dispatch_in_progress`/`announce_linux_validation_terminal_dispatch_blocker`/`announce_linux_validation_terminal_dispatch_failure`/`abort_linux_validation_terminal_dispatch_final_verdict_publish`)
+    - `linux_validation_terminal_dispatch_final_verdict_publish_exit_code`
+    - `linux_validation_terminal_dispatch_final_verdict_publish_should_notify` / `linux_validation_terminal_dispatch_final_verdict_publish_requires_manual_action` / `linux_validation_terminal_dispatch_final_verdict_publish_should_page_owner` / `linux_validation_terminal_dispatch_final_verdict_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_final_verdict_publish_gate.py`
+  - `tests/test_p2_lv_td_final_verdict_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: final verdict=`validated` converges to `published` + `announce_linux_validation_terminal_dispatch_validated`.
+  - `T2`: final verdict=`validated_with_follow_up` converges to `published_with_follow_up` + `announce_linux_validation_terminal_dispatch_validated_with_follow_up`.
+  - `T3`: final verdict=`blocked` converges to `blocked` + `announce_linux_validation_terminal_dispatch_blocker`.
+  - `T4`: final verdict contract mismatch converges to `contract_failed` + `abort_linux_validation_terminal_dispatch_final_verdict_publish`.
+  - `T5`: GitHub output includes status/decision/exit_code/notify+manual-action+page-owner/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-74`
+
+## P2-76 Linux CI Workflow Linux Validation Terminal Dispatch Final Publish Archive Gate
+- Card ID: `P2-76`
+- Priority: `P2`
+- Problem:
+  - `P2-75` converges Linux validation terminal dispatch final verdict into one publish contract, but Linux CI still lacks one terminal archive contract that downstream closure and audit consumers can ingest directly.
+  - Without a dedicated final-publish-archive artifact, archive/manual-action/escalation semantics for published/in-progress/blocked/failed outcomes can drift across Linux-stage closure and operations handoff paths.
+- Scope:
+  - Add one Linux validation terminal dispatch final publish archive gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_verdict_publish.json` (`P2-75`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_final_publish_archive_status` (`archived`/`archived_with_follow_up`/`in_progress`/`blocked`/`failed`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_final_publish_archive_decision` (`archive_linux_validation_terminal_dispatch_validated`/`archive_linux_validation_terminal_dispatch_validated_with_follow_up`/`archive_linux_validation_terminal_dispatch_in_progress`/`archive_linux_validation_terminal_dispatch_blocker`/`archive_linux_validation_terminal_dispatch_failure`/`abort_linux_validation_terminal_dispatch_final_publish_archive`)
+    - `linux_validation_terminal_dispatch_final_publish_archive_exit_code`
+    - `linux_validation_terminal_dispatch_final_publish_archive_should_archive` / `linux_validation_terminal_dispatch_final_publish_archive_requires_manual_action` / `linux_validation_terminal_dispatch_final_publish_archive_should_page_owner` / `linux_validation_terminal_dispatch_final_publish_archive_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_final_publish_archive_gate.py`
+  - `tests/test_p2_lv_td_final_publish_archive_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: final verdict publish=`published` converges to `archived` + `archive_linux_validation_terminal_dispatch_validated`.
+  - `T2`: final verdict publish=`published_with_follow_up` converges to `archived_with_follow_up` + `archive_linux_validation_terminal_dispatch_validated_with_follow_up`.
+  - `T3`: final verdict publish=`in_progress` converges to `in_progress` + `archive_linux_validation_terminal_dispatch_in_progress`.
+  - `T4`: final verdict publish=`blocked`/`failed` converges to `blocked`/`failed` archive outcomes and keeps manual-action/page-owner semantics.
+  - `T5`: final verdict publish contract mismatch converges to `contract_failed` + `abort_linux_validation_terminal_dispatch_final_publish_archive`.
+  - `T6`: GitHub output includes status/decision/exit_code/archive+manual-action+page-owner/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-75`
+
+## P2-77 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Gate
+- Card ID: `P2-77`
+- Priority: `P2`
+- Problem:
+  - `P2-76` converges Linux validation terminal dispatch final publish archive semantics, but Linux CI still lacks one terminal verdict contract that gates whether downstream Linux terminal dispatch should proceed, hold, or halt.
+  - Without one terminal-verdict artifact, proceed/manual-action/escalation semantics can drift between archive closure and downstream Linux-stage dispatch orchestration.
+- Scope:
+  - Add one Linux validation terminal dispatch terminal verdict gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_final_publish_archive.json` (`P2-76`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_terminal_verdict_status` (`ready_for_linux_validation_terminal_dispatch`/`ready_with_follow_up_for_linux_validation_terminal_dispatch`/`in_progress`/`blocked`/`failed`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_terminal_verdict_decision` (`proceed_linux_validation_terminal_dispatch`/`proceed_linux_validation_terminal_dispatch_with_follow_up`/`hold_linux_validation_terminal_dispatch_in_progress`/`halt_linux_validation_terminal_dispatch_blocker`/`halt_linux_validation_terminal_dispatch_failure`/`abort_linux_validation_terminal_dispatch_terminal_verdict`)
+    - `linux_validation_terminal_dispatch_terminal_verdict_exit_code`
+    - `linux_validation_terminal_dispatch_terminal_verdict_should_proceed` / `linux_validation_terminal_dispatch_terminal_verdict_requires_manual_action` / `linux_validation_terminal_dispatch_terminal_verdict_should_page_owner` / `linux_validation_terminal_dispatch_terminal_verdict_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_terminal_verdict_gate.py`
+  - `tests/test_p2_lv_td_terminal_verdict_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: final publish archive=`archived` converges to `ready_for_linux_validation_terminal_dispatch` + `proceed_linux_validation_terminal_dispatch`.
+  - `T2`: final publish archive=`archived_with_follow_up` converges to `ready_with_follow_up_for_linux_validation_terminal_dispatch` + `proceed_linux_validation_terminal_dispatch_with_follow_up`.
+  - `T3`: final publish archive=`in_progress` converges to `in_progress` + `hold_linux_validation_terminal_dispatch_in_progress`.
+  - `T4`: final publish archive=`blocked`/`failed` converges to `blocked`/`failed` halt outcomes and preserves manual-action/page-owner semantics.
+  - `T5`: final publish archive contract mismatch converges to `contract_failed` + `abort_linux_validation_terminal_dispatch_terminal_verdict`.
+  - `T6`: GitHub output includes status/decision/exit_code/proceed+manual-action+page-owner/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-76`
+
+## P2-78 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Publish Gate
+- Card ID: `P2-78`
+- Priority: `P2`
+- Problem:
+  - `P2-77` converges Linux validation terminal dispatch final publish archive outcomes into one terminal verdict contract, but Linux CI still lacks one terminal verdict publish contract for downstream audit, notifications, and closure consumers.
+  - Without one terminal-verdict-publish artifact, notification/manual-action/escalation semantics can drift between terminal verdict and Linux-stage closure dispatch.
+- Scope:
+  - Add one Linux validation terminal dispatch terminal verdict publish gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict.json` (`P2-77`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_status` (`published`/`published_with_follow_up`/`in_progress`/`blocked`/`failed`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_decision` (`announce_linux_validation_terminal_dispatch_ready`/`announce_linux_validation_terminal_dispatch_ready_with_follow_up`/`announce_linux_validation_terminal_dispatch_in_progress`/`announce_linux_validation_terminal_dispatch_blocker`/`announce_linux_validation_terminal_dispatch_failure`/`abort_linux_validation_terminal_dispatch_terminal_verdict_publish`)
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_exit_code`
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_should_notify` / `linux_validation_terminal_dispatch_terminal_verdict_publish_requires_manual_action` / `linux_validation_terminal_dispatch_terminal_verdict_publish_should_page_owner` / `linux_validation_terminal_dispatch_terminal_verdict_publish_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_tverdict_publish_gate.py`
+  - `tests/test_p2_lv_td_tverdict_publish_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: terminal verdict=`ready_for_linux_validation_terminal_dispatch` converges to `published` + `announce_linux_validation_terminal_dispatch_ready`.
+  - `T2`: terminal verdict=`ready_with_follow_up_for_linux_validation_terminal_dispatch` converges to `published_with_follow_up` + `announce_linux_validation_terminal_dispatch_ready_with_follow_up`.
+  - `T3`: terminal verdict=`in_progress` converges to `in_progress` + `announce_linux_validation_terminal_dispatch_in_progress`.
+  - `T4`: terminal verdict=`blocked`/`failed` converges to `blocked`/`failed` announce outcomes and preserves manual-action/page-owner semantics.
+  - `T5`: terminal verdict contract mismatch converges to `contract_failed` + `abort_linux_validation_terminal_dispatch_terminal_verdict_publish`.
+  - `T6`: GitHub output includes status/decision/exit_code/notify+manual-action+page-owner/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-77`
+
+## P2-79 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Publish Archive Gate
+- Card ID: `P2-79`
+- Priority: `P2`
+- Problem:
+  - `P2-78` converges Linux validation terminal dispatch terminal verdict into one publish artifact, but Linux CI still lacks one archive contract for this publish stage.
+  - Without a terminal-verdict-publish-archive artifact, downstream closure/audit consumers cannot rely on one stable terminal dispatch archive status.
+- Scope:
+  - Add one Linux validation terminal dispatch terminal verdict publish archive gate that consumes:
+    - `.claude/reports/linux_unified_gate/ci_workflow_linux_validation_terminal_dispatch_terminal_verdict_publish.json` (`P2-78`)
+  - Emit normalized outputs:
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_status` (`archived`/`archived_with_follow_up`/`in_progress`/`blocked`/`failed`/`contract_failed`)
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_decision` (`archive_linux_validation_terminal_dispatch_ready`/`archive_linux_validation_terminal_dispatch_ready_with_follow_up`/`archive_linux_validation_terminal_dispatch_in_progress`/`archive_linux_validation_terminal_dispatch_blocker`/`archive_linux_validation_terminal_dispatch_failure`/`abort_linux_validation_terminal_dispatch_terminal_verdict_publish_archive`)
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_exit_code`
+    - `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_should_archive` / `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_requires_manual_action` / `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_should_page_owner` / `linux_validation_terminal_dispatch_terminal_verdict_publish_archive_channel`
+  - Export `--github-output` fields for CI consumers.
+- Implementation:
+  - `scripts/run_p2_lv_td_tverdict_publish_archive_gate.py`
+  - `tests/test_p2_lv_td_tverdict_publish_archive_rt.py`
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py`
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py`
+  - `scripts/run_linux_unified_gate.py`
+  - `README.md`
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md`
+- Test Contract:
+  - `T1`: publish status=`published` converges to `archived` + `archive_linux_validation_terminal_dispatch_ready`.
+  - `T2`: publish status=`published_with_follow_up` converges to `archived_with_follow_up` + `archive_linux_validation_terminal_dispatch_ready_with_follow_up`.
+  - `T3`: publish status=`in_progress` converges to `in_progress` + `archive_linux_validation_terminal_dispatch_in_progress`.
+  - `T4`: publish status=`blocked`/`failed` converges to `blocked`/`failed` archive outcomes and preserves manual-action/page-owner semantics.
+  - `T5`: publish contract mismatch converges to `contract_failed` + `abort_linux_validation_terminal_dispatch_terminal_verdict_publish_archive`.
+  - `T6`: GitHub output includes status/decision/exit_code/archive+manual-action+page-owner/channel/follow-up/run-id/run-url/report paths.
+- Depends on: `P2-78`
 
 ## 8. 鎺ㄨ崘杩唬椤哄簭
 
@@ -2870,13 +3486,13 @@ P2-01 Agent Supervisor
 - Card: `P2-60 Linux CI Workflow Linux Validation Dispatch Gate`
 - Status: `implemented` (Linux full-suite verification pending)
 - Code landed:
-  - `scripts/run_p2_linux_ci_workflow_linux_validation_dispatch_gate.py` (converges P2-59 terminal verdict into Linux validation dispatch contract with `ready_dry_run/ready_with_follow_up_dry_run/dispatched/dispatch_failed/blocked/contract_failed` status and `dispatch_linux_validation/dispatch_linux_validation_with_follow_up/hold_linux_validation_blocker/abort_linux_validation_dispatch` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_lv_dispatch_gate.py` (converges P2-59 terminal verdict into Linux validation dispatch contract with `ready_dry_run/ready_with_follow_up_dry_run/dispatched/dispatch_failed/blocked/contract_failed` status and `dispatch_linux_validation/dispatch_linux_validation_with_follow_up/hold_linux_validation_blocker/abort_linux_validation_dispatch` decision, plus consistency guards and markdown/json/github-output contracts)
   - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-60`, adds Linux validation dispatch outputs, stage wiring, timeout flag, and `--skip-linux-validation-dispatch` switch)
   - `scripts/run_linux_unified_gate.py` (adds P2-60 Linux validation dispatch contract test to unified manifest)
   - `README.md` (adds P2-60 standalone usage, updates full-chain examples to `P2-17 -> P2-60`, and adds P2-60-only pipeline command)
   - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-60 card, and execution log)
 - Test scripts landed:
-  - `tests/test_p2_linux_ci_workflow_linux_validation_dispatch_gate_runtime.py` (`T1` ready->ready_dry_run contract, `T2` ready_with_follow_up->ready_with_follow_up_dry_run contract, `T3` blocked->blocked contract, `T4` mismatch/drift/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_lv_dispatch_rt.py` (`T1` ready->ready_dry_run contract, `T2` ready_with_follow_up->ready_with_follow_up_dry_run contract, `T3` blocked->blocked contract, `T4` mismatch/drift/evidence issue->contract_failed contract, `T5` github-output field contract)
   - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-60 stage presence in default/partial chain, command assertions for Linux validation dispatch paths/timeout, and P2-60-only stage contract coverage)
 - Verification performed (without running tests):
   - `py -3 scripts/check_syntax.py --root scripts --json` passed.
@@ -2889,16 +3505,349 @@ P2-01 Agent Supervisor
 - Card: `P2-61 Linux CI Workflow Linux Validation Verdict Gate`
 - Status: `implemented` (Linux full-suite verification pending)
 - Code landed:
-  - `scripts/run_p2_linux_ci_workflow_linux_validation_verdict_gate.py` (converges P2-60 Linux validation dispatch artifact into one final Linux validation verdict contract with `validated/validated_with_follow_up/validation_failed/blocked/contract_failed` status and `accept_linux_validation/accept_linux_validation_with_follow_up/escalate_linux_validation_failure/hold_linux_validation_blocker/abort_linux_validation_verdict` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_lv_verdict_gate.py` (converges P2-60 Linux validation dispatch artifact into one final Linux validation verdict contract with `validated/validated_with_follow_up/validation_failed/blocked/contract_failed` status and `accept_linux_validation/accept_linux_validation_with_follow_up/escalate_linux_validation_failure/hold_linux_validation_blocker/abort_linux_validation_verdict` decision, plus consistency guards and markdown/json/github-output contracts)
   - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-61`, adds Linux validation verdict outputs, stage wiring, and `--skip-linux-validation-verdict` switch)
   - `scripts/run_linux_unified_gate.py` (adds P2-61 Linux validation verdict contract test to unified manifest)
   - `README.md` (adds P2-61 standalone usage, updates full-chain examples to `P2-17 -> P2-61`, and adds P2-61-only pipeline command)
   - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-61 card, and execution log)
 - Test scripts landed:
-  - `tests/test_p2_linux_ci_workflow_linux_validation_verdict_gate_runtime.py` (`T1` ready_dry_run->validated contract, `T2` ready_with_follow_up_dry_run->validated_with_follow_up contract, `T3` dispatch_failed->validation_failed contract, `T4` dispatch/evidence mismatch->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_lv_verdict_rt.py` (`T1` ready_dry_run->validated contract, `T2` ready_with_follow_up_dry_run->validated_with_follow_up contract, `T3` dispatch_failed->validation_failed contract, `T4` dispatch/evidence mismatch->contract_failed contract, `T5` github-output field contract)
   - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-61 stage presence in default/partial chain, command assertions for Linux validation verdict paths, skip propagation for `skip_linux_validation_verdict`, and P2-61-only stage contract coverage)
 - Verification performed (without running tests):
   - `py -3 scripts/check_syntax.py --root scripts --json` passed.
   - `py -3 scripts/check_syntax.py --root tests --json` passed.
 - Not executed locally per release policy:
   - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 92. Execution Log (2026-05-02, P2-62)
+
+- Card: `P2-62 Linux CI Workflow Linux Validation Verdict Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_verdict_publish_gate.py` (converges P2-61 Linux validation verdict artifact into one publish contract with `published/published_with_follow_up/blocked/contract_failed` status and `announce_linux_validation_passed/announce_linux_validation_passed_with_follow_up/announce_linux_validation_blocker/abort_publish` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-62`, adds Linux validation verdict publish outputs, stage wiring, and `--skip-linux-validation-verdict-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-62 Linux validation verdict publish contract test to unified manifest)
+  - `README.md` (adds P2-62 standalone usage, updates full-chain examples to `P2-17 -> P2-62`, and adds P2-62-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-62 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_verdict_publish_rt.py` (`T1` validated->published contract, `T2` validated_with_follow_up->published_with_follow_up contract, `T3` blocked->blocked contract, `T4` contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-62 stage presence in default/partial chain, command assertions for Linux validation verdict publish paths, skip propagation for `skip_linux_validation_verdict_publish`, and P2-62-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 93. Execution Log (2026-05-02, P2-63)
+
+- Card: `P2-63 Linux CI Workflow Linux Validation Terminal Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_terminal_publish_gate.py` (converges P2-62 Linux validation verdict publish artifact into one terminal publish contract with `terminal_published/terminal_published_with_follow_up/terminal_blocked/terminal_contract_failed` status and `announce_linux_validation_terminal_passed/announce_linux_validation_terminal_passed_with_follow_up/announce_linux_validation_terminal_blocker/abort_terminal_publish` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-63`, adds Linux validation terminal publish outputs, stage wiring, and `--skip-linux-validation-terminal-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-63 Linux validation terminal publish contract test to unified manifest)
+  - `README.md` (adds P2-63 standalone usage, updates full-chain examples to `P2-17 -> P2-63`, and adds P2-63-only pipeline command)
+- Test scripts landed:
+  - `tests/test_p2_lv_terminal_publish_rt.py` (`T1` published->terminal_published contract, `T2` published_with_follow_up->terminal_published_with_follow_up contract, `T3` blocked->terminal_blocked contract, `T4` publish contract mismatch/evidence issue->terminal_contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-63 stage presence in default/partial chain, command assertions for Linux validation terminal publish paths, skip propagation for `skip_linux_validation_terminal_publish`, and P2-63-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 94. Execution Log (2026-05-02, P2-64)
+
+- Card: `P2-64 Linux CI Workflow Linux Validation Final Verdict Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_final_verdict_gate.py` (converges P2-63 Linux validation terminal publish artifact into final verdict contract with `validated/validated_with_follow_up/blocked/contract_failed` status and `accept_linux_validation_terminal/accept_linux_validation_terminal_with_follow_up/escalate_linux_validation_terminal_blocker/abort_linux_validation_terminal_verdict` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-64`, adds Linux validation final verdict outputs, stage wiring, and `--skip-linux-validation-final-verdict` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-64 Linux validation final verdict contract test to unified manifest)
+  - `README.md` (adds P2-64 standalone usage, updates full-chain examples to `P2-17 -> P2-64`, and adds P2-64-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-64 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_final_verdict_rt.py` (`T1` terminal_published->validated contract, `T2` terminal_published_with_follow_up->validated_with_follow_up contract, `T3` terminal_blocked->blocked contract, `T4` terminal contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-64 stage presence in default/partial chain, command assertions for Linux validation final verdict paths, skip propagation for `skip_linux_validation_final_verdict`, and P2-64-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+
+## 95. Execution Log (2026-05-02, P2-65)
+
+- Card: `P2-65 Linux CI Workflow Linux Validation Final Verdict Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_final_verdict_publish_gate.py` (converges P2-64 Linux validation final verdict artifact into one publish contract with `published/published_with_follow_up/blocked/contract_failed` status and `announce_linux_validation_final_validated/announce_linux_validation_final_validated_with_follow_up/announce_linux_validation_final_blocker/abort_publish` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-65`, adds Linux validation final verdict publish outputs, stage wiring, and `--skip-linux-validation-final-verdict-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-65 Linux validation final verdict publish contract test to unified manifest)
+  - `README.md` (adds P2-65 standalone usage, updates full-chain examples to `P2-17 -> P2-65`, and adds P2-65-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-65 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_final_verdict_publish_rt.py` (`T1` validated->published contract, `T2` validated_with_follow_up->published_with_follow_up contract, `T3` blocked->blocked contract, `T4` final verdict contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-65 stage presence in default/partial chain, command assertions for Linux validation final verdict publish paths, skip propagation for `skip_linux_validation_final_verdict_publish`, and P2-65-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 96. Execution Log (2026-05-02, P2-66)
+
+- Card: `P2-66 Linux CI Workflow Linux Validation Final Publish Archive Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_final_publish_archive_gate.py` (converges P2-65 Linux validation final verdict publish artifact into one final archive contract with `archived/archived_with_follow_up/blocked/contract_failed` status and `archive_release_shipped/archive_release_shipped_with_follow_up/archive_release_blocker/abort_archive` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-66`, adds Linux validation final publish archive outputs, stage wiring, and `--skip-linux-validation-final-publish-archive` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-66 Linux validation final publish archive contract test to unified manifest)
+  - `README.md` (adds P2-66 standalone usage, updates full-chain examples to `P2-17 -> P2-66`, and adds P2-66-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-66 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_final_publish_archive_rt.py` (`T1` published->archived contract, `T2` published_with_follow_up->archived_with_follow_up contract, `T3` blocked->blocked contract, `T4` publish contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-66 stage presence in default/partial chain, command assertions for Linux validation final publish archive paths, skip propagation for `skip_linux_validation_final_publish_archive`, and P2-66-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 97. Execution Log (2026-05-02, P2-67)
+
+- Card: `P2-67 Linux CI Workflow Linux Validation Terminal Verdict Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_terminal_verdict_gate.py` (converges P2-66 Linux validation final publish archive artifact into one terminal verdict contract with `ready_for_linux_validation/ready_with_follow_up_for_linux_validation/blocked/contract_failed` status and `proceed_linux_validation/proceed_linux_validation_with_follow_up/halt_linux_validation_blocker/abort_linux_validation` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-67`, adds Linux validation terminal verdict outputs, stage wiring, and `--skip-linux-validation-terminal-verdict` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-67 Linux validation terminal verdict contract test to unified manifest)
+  - `README.md` (adds P2-67 standalone usage, updates full-chain examples to `P2-17 -> P2-67`, and adds P2-67-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-67 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_terminal_verdict_rt.py` (`T1` archived->ready_for_linux_validation contract, `T2` archived_with_follow_up->ready_with_follow_up_for_linux_validation contract, `T3` blocked->blocked contract, `T4` archive contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-67 stage presence in default/partial chain, command assertions for Linux validation terminal verdict paths, skip propagation for `skip_linux_validation_terminal_verdict`, and P2-67-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 98. Execution Log (2026-05-02, P2-68)
+
+- Card: `P2-68 Linux CI Workflow Linux Validation Terminal Verdict Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_terminal_verdict_publish_gate.py` (converges P2-67 Linux validation terminal verdict artifact into one publish contract with `published/published_with_follow_up/blocked/contract_failed` status and `announce_linux_validation_terminal_ready/announce_linux_validation_terminal_ready_with_follow_up/announce_linux_validation_terminal_blocker/abort_publish` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-68`, adds Linux validation terminal verdict publish outputs, stage wiring, and `--skip-linux-validation-terminal-verdict-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-68 Linux validation terminal verdict publish contract test to unified manifest)
+  - `README.md` (adds P2-68 standalone usage, updates full-chain examples to `P2-17 -> P2-68`, and adds P2-68-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-68 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_terminal_verdict_publish_rt.py` (`T1` ready_for_linux_validation->published contract, `T2` ready_with_follow_up_for_linux_validation->published_with_follow_up contract, `T3` blocked->blocked contract, `T4` terminal verdict contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-68 stage presence in default/partial chain, command assertions for Linux validation terminal verdict publish paths, skip propagation for `skip_linux_validation_terminal_verdict_publish`, and P2-68-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 99. Execution Log (2026-05-02, P2-69)
+
+- Card: `P2-69 Linux CI Workflow Linux Validation Terminal Dispatch Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_dispatch_gate.py` (converges P2-68 Linux validation terminal verdict publish artifact into one terminal dispatch contract with `ready_dry_run/ready_with_follow_up_dry_run/blocked/contract_failed` status and `dispatch_linux_validation_terminal/dispatch_linux_validation_terminal_with_follow_up/hold_linux_validation_terminal_blocker/abort_linux_validation_terminal_dispatch` decision, plus consistency guards and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-69`, adds Linux validation terminal dispatch outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-69 Linux validation terminal dispatch contract test to unified manifest)
+  - `README.md` (adds P2-69 standalone usage, updates full-chain examples to `P2-17 -> P2-69`, and adds P2-69-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-69 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_dispatch_rt.py` (`T1` published->ready_dry_run contract, `T2` published_with_follow_up->ready_with_follow_up_dry_run contract, `T3` blocked->blocked contract, `T4` publish contract mismatch/evidence issue->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-69 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch paths, skip propagation for `skip_linux_validation_terminal_dispatch`, and P2-69-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 100. Execution Log (2026-05-02, P2-70)
+
+- Card: `P2-70 Linux CI Workflow Linux Validation Terminal Dispatch Execution Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_execution_gate.py` (executes P2-69 Linux validation terminal dispatch artifact into one terminal dispatch execution contract with `ready_dry_run/ready_with_follow_up_dry_run/dispatched/dispatch_failed/blocked/contract_failed` status and `dispatch_linux_validation_terminal/dispatch_linux_validation_terminal_with_follow_up/hold_linux_validation_terminal_blocker/abort_linux_validation_terminal_dispatch` decision, plus timeout/CLI-error handling and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-70`, adds Linux validation terminal dispatch execution outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-execution` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-70 Linux validation terminal dispatch execution contract test to unified manifest)
+  - `README.md` (adds P2-70 standalone usage, updates full-chain examples to `P2-17 -> P2-70`, and adds P2-70-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-70 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_execution_rt.py` (`T1` ready_dry_run->ready_dry_run contract, `T2` ready_with_follow_up_dry_run+command_success->dispatched contract, `T3` blocked->blocked contract, `T4` contract mismatch rejection + command failure path contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-70 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch execution paths and timeout wiring, skip propagation for `skip_linux_validation_terminal_dispatch_execution`, and P2-70-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 101. Execution Log (2026-05-02, P2-71)
+
+- Card: `P2-71 Linux CI Workflow Linux Validation Terminal Dispatch Trace Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_trace_gate.py` (converges P2-70 Linux validation terminal dispatch execution artifact into one trace contract with `run_tracking_ready/run_tracking_missing/run_poll_failed/run_in_progress/run_completed_success/run_completed_failure` states, optional poll-now execution, and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-71`, adds Linux validation terminal dispatch trace outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-trace` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-71 Linux validation terminal dispatch trace contract test to unified manifest)
+  - `README.md` (adds P2-71 standalone usage, updates full-chain examples to `P2-17 -> P2-71`, and adds P2-71-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-71 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_trace_rt.py` (`T1` dispatched+run-url->run_tracking_ready contract, `T2` dispatched without run-url->run_tracking_missing contract, `T3` dispatch_failed passthrough contract, `T4` execution contract mismatch rejection, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-71 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch trace paths and timeout wiring, skip propagation for `skip_linux_validation_terminal_dispatch_trace`, and P2-71-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 102. Execution Log (2026-05-03, P2-72)
+
+- Card: `P2-72 Linux CI Workflow Linux Validation Terminal Dispatch Completion Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_completion_gate.py` (converges P2-71 Linux validation terminal dispatch trace artifact into one completion-await contract with `run_completed_success/run_completed_failure/run_in_progress/run_poll_failed/run_await_timeout` outcomes, optional await-loop execution, and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-72`, adds Linux validation terminal dispatch completion outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-completion` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-72 Linux validation terminal dispatch completion contract test to unified manifest)
+  - `README.md` (adds P2-72 standalone usage, updates full-chain examples to `P2-17 -> P2-72`, and adds P2-72-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-72 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_completion_rt.py` (`T1` run-tracking-ready+completed-success->run_completed_success contract, `T2` repeated in-progress->run_await_timeout contract, `T3` non-polling terminal passthrough contract, `T4` poll command contract mismatch rejection, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-72 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch completion paths and poll wiring, skip propagation for `skip_linux_validation_terminal_dispatch_completion`, and P2-72-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 103. Execution Log (2026-05-03, P2-73)
+
+- Card: `P2-73 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_terminal_publish_gate.py` (converges P2-72 Linux validation terminal dispatch completion artifact into one terminal publish contract with `terminal_published/terminal_published_with_follow_up/terminal_in_progress/terminal_blocked/terminal_failed/terminal_contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-73`, adds Linux validation terminal dispatch terminal publish outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-terminal-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-73 Linux validation terminal dispatch terminal publish contract test to unified manifest)
+  - `README.md` (adds P2-73 standalone usage, updates full-chain examples to `P2-17 -> P2-73`, and adds P2-73-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-73 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_terminal_publish_rt.py` (`T1` completion success -> terminal_published contract, `T2` allow-in-progress timeout -> terminal_in_progress contract, `T3` completion mismatch -> terminal_contract_failed contract, `T4` github-output field contract for follow-up channel)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-73 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch terminal publish paths, skip propagation for `skip_linux_validation_terminal_dispatch_terminal_publish`, and P2-73-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 104. Execution Log (2026-05-03, P2-74)
+
+- Card: `P2-74 Linux CI Workflow Linux Validation Terminal Dispatch Final Verdict Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_final_verdict_gate.py` (converges P2-73 Linux validation terminal dispatch terminal publish artifact into one final verdict contract with `validated/validated_with_follow_up/in_progress/blocked/failed/contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-74`, adds Linux validation terminal dispatch final verdict outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-final-verdict` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-74 Linux validation terminal dispatch final verdict contract test to unified manifest)
+  - `README.md` (adds P2-74 standalone usage, updates full-chain examples to `P2-17 -> P2-74`, and adds P2-74-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-74 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_final_verdict_rt.py` (`T1` terminal published -> validated contract, `T2` follow-up terminal published -> validated_with_follow_up contract, `T3` terminal blocked -> blocked contract, `T4` terminal publish contract mismatch -> contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-74 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch final verdict paths, skip propagation for `skip_linux_validation_terminal_dispatch_final_verdict`, and P2-74-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+
+## 105. Execution Log (2026-05-03, P2-75)
+
+- Card: `P2-75 Linux CI Workflow Linux Validation Terminal Dispatch Final Verdict Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_final_verdict_publish_gate.py` (converges P2-74 Linux validation terminal dispatch final verdict artifact into one publish contract with `published/published_with_follow_up/in_progress/blocked/failed/contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-75`, adds Linux validation terminal dispatch final verdict publish outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-final-verdict-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-75 Linux validation terminal dispatch final verdict publish contract test to unified manifest)
+  - `README.md` (adds P2-75 standalone usage, updates full-chain examples to `P2-17 -> P2-75`, and adds P2-75-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-75 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_final_verdict_publish_rt.py` (`T1` validated->published contract, `T2` validated_with_follow_up->published_with_follow_up contract, `T3` blocked->blocked contract, `T4` final verdict contract mismatch->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-75 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch final verdict publish paths, skip propagation for `skip_linux_validation_terminal_dispatch_final_verdict_publish`, and P2-75-only stage contract coverage)
+
+## 106. Execution Log (2026-05-03, P2-76)
+
+- Card: `P2-76 Linux CI Workflow Linux Validation Terminal Dispatch Final Publish Archive Gate`
+- Result: landed
+- Key changes:
+  - `scripts/run_p2_lv_td_final_publish_archive_gate.py` (converges P2-75 Linux validation terminal dispatch final verdict publish artifact into one final archive contract with `archived/archived_with_follow_up/in_progress/blocked/failed/contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-76`, adds Linux validation terminal dispatch final publish archive outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-final-publish-archive` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-76 Linux validation terminal dispatch final publish archive contract test to unified manifest)
+  - `README.md` (adds P2-76 standalone usage, updates full-chain examples to `P2-17 -> P2-76`, and adds P2-76-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-76 card, and execution log)
+- Tests added/updated:
+  - `tests/test_p2_lv_td_final_publish_archive_rt.py` (`T1` published->archived contract, `T2` published_with_follow_up->archived_with_follow_up contract, `T3` in_progress->in_progress contract, `T4` blocked/failed archive contracts, `T5` publish contract mismatch->contract_failed contract, `T6` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-76 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch final publish archive paths, skip propagation for `skip_linux_validation_terminal_dispatch_final_publish_archive`, and P2-76-only stage contract coverage)
+
+## 107. Execution Log (2026-05-03, P2-77)
+
+- Card: `P2-77 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_terminal_verdict_gate.py` (converges P2-76 Linux validation terminal dispatch final publish archive artifact into one terminal verdict contract with `ready_for_linux_validation_terminal_dispatch/ready_with_follow_up_for_linux_validation_terminal_dispatch/in_progress/blocked/failed/contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-77`, adds Linux validation terminal dispatch terminal verdict outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-terminal-verdict` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-77 Linux validation terminal dispatch terminal verdict contract test to unified manifest)
+  - `README.md` (adds P2-77 standalone usage, updates full-chain examples to `P2-17 -> P2-77`, and adds P2-77-only command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-77 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_terminal_verdict_rt.py` (`T1` archived->ready_for_linux_validation_terminal_dispatch contract, `T2` archived_with_follow_up->ready_with_follow_up_for_linux_validation_terminal_dispatch contract, `T3` in_progress->in_progress contract, `T4` blocked->blocked contract, `T5` final publish archive mismatch->contract_failed contract, `T6` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-77 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch terminal verdict paths, skip propagation for `skip_linux_validation_terminal_dispatch_terminal_verdict`, and P2-77-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` passed.
+  - `py -3 scripts/check_syntax.py --root tests --json` passed.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 108. Execution Log (2026-05-03, P2-78)
+
+- Card: `P2-78 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Publish Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_tverdict_publish_gate.py` (converges P2-77 Linux validation terminal dispatch terminal verdict artifact into one publish contract with `published/published_with_follow_up/in_progress/blocked/failed/contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-78`, adds Linux validation terminal dispatch terminal verdict publish outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-terminal-verdict-publish` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-78 Linux validation terminal dispatch terminal verdict publish contract test to unified manifest)
+  - `README.md` (adds P2-78 standalone usage, updates full-chain examples to `P2-17 -> P2-78`, and adds P2-78-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-78 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_tverdict_publish_rt.py` (`T1` ready_for_linux_validation_terminal_dispatch->published contract, `T2` ready_with_follow_up_for_linux_validation_terminal_dispatch->published_with_follow_up contract, `T3` blocked->blocked contract, `T4` terminal verdict contract mismatch->contract_failed contract, `T5` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-78 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch terminal verdict publish paths, skip propagation for `skip_linux_validation_terminal_dispatch_terminal_verdict_publish`, and P2-78-only stage contract coverage)
+- Verification performed (without running tests):
+  - `py -3 scripts/check_syntax.py --root scripts --json` pending.
+  - `py -3 scripts/check_syntax.py --root tests --json` pending.
+- Not executed locally per release policy:
+  - No pytest execution; all new/updated runtime contract tests remain pending for Linux unified validation stage.
+
+## 109. Execution Log (2026-05-03, P2-79)
+
+- Card: `P2-79 Linux CI Workflow Linux Validation Terminal Dispatch Terminal Verdict Publish Archive Gate`
+- Status: `implemented` (Linux full-suite verification pending)
+- Code landed:
+  - `scripts/run_p2_lv_td_tverdict_publish_archive_gate.py` (converges P2-78 Linux validation terminal dispatch terminal verdict publish artifact into one archive contract with `archived/archived_with_follow_up/in_progress/blocked/failed/contract_failed` outcomes and markdown/json/github-output contracts)
+  - `scripts/run_p2_linux_ci_workflow_pipeline_gate.py` (extends stage chain to compose `P2-17 -> P2-79`, adds Linux validation terminal dispatch terminal verdict publish archive outputs, stage wiring, skip propagation, and `--skip-linux-validation-terminal-dispatch-terminal-verdict-publish-archive` switch)
+  - `scripts/run_linux_unified_gate.py` (adds P2-79 Linux validation terminal dispatch terminal verdict publish archive contract test to unified manifest)
+  - `README.md` (adds P2-79 standalone usage, updates full-chain examples to `P2-17 -> P2-79`, and adds P2-79-only pipeline command)
+  - `docs/current/architecture/EXECUTION_TASK_CARDS_2026-04-29.md` (adds dependency-chain extension, P2-79 card, and execution log)
+- Test scripts landed:
+  - `tests/test_p2_lv_td_tverdict_publish_archive_rt.py` (`T1` published->archived contract, `T2` published_with_follow_up->archived_with_follow_up contract, `T3` in_progress->in_progress contract, `T4` blocked/failed archive contracts, `T5` publish contract mismatch->contract_failed contract, `T6` github-output field contract)
+  - `tests/test_p2_linux_ci_workflow_pipeline_gate_runtime.py` (adds P2-79 stage presence in default/partial chain, command assertions for Linux validation terminal dispatch terminal verdict publish archive paths, skip propagation for `skip_linux_validation_terminal_dispatch_terminal_verdict_publish_archive`, and P2-79-only stage contract coverage)
+- Verification performed (without running tests):
+  - No local pytest execution by policy for this run.
+- Not executed locally per release policy:
+  - Runtime contract tests remain pending for Linux unified validation stage.
+

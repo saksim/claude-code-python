@@ -1,4 +1,4 @@
-"""Linux-stage unified verification gate for Phase 0 -> Phase 2 cards.
+﻿"""Linux-stage unified verification gate for Phase 0 -> Phase 2 cards.
 
 This script only defines Linux-stage test command list and does not run tests.
 """
@@ -104,8 +104,26 @@ LINUX_UNIFIED_TEST_FILES: tuple[str, ...] = (
     "tests/test_linux_unified_gate_runtime.py",
     "tests/test_p2_linux_gate_manifest_drift_gate_runtime.py",
     "tests/test_p2_linux_ci_workflow_terminal_verdict_gate_runtime.py",
-    "tests/test_p2_linux_ci_workflow_linux_validation_dispatch_gate_runtime.py",
-    "tests/test_p2_linux_ci_workflow_linux_validation_verdict_gate_runtime.py",
+    "tests/test_p2_lv_dispatch_rt.py",
+    "tests/test_p2_lv_verdict_rt.py",
+    "tests/test_p2_lv_verdict_publish_rt.py",
+    "tests/test_p2_lv_terminal_publish_rt.py",
+    "tests/test_p2_lv_final_verdict_rt.py",
+    "tests/test_p2_lv_final_verdict_publish_rt.py",
+    "tests/test_p2_lv_final_publish_archive_rt.py",
+    "tests/test_p2_lv_terminal_verdict_rt.py",
+    "tests/test_p2_lv_terminal_verdict_publish_rt.py",
+    "tests/test_p2_lv_td_dispatch_rt.py",
+    "tests/test_p2_lv_td_execution_rt.py",
+    "tests/test_p2_lv_td_trace_rt.py",
+    "tests/test_p2_lv_td_completion_rt.py",
+    "tests/test_p2_lv_td_terminal_publish_rt.py",
+    "tests/test_p2_lv_td_final_verdict_rt.py",
+    "tests/test_p2_lv_td_final_verdict_publish_rt.py",
+    "tests/test_p2_lv_td_final_publish_archive_rt.py",
+    "tests/test_p2_lv_td_terminal_verdict_rt.py",
+    "tests/test_p2_lv_td_tverdict_publish_rt.py",
+    "tests/test_p2_lv_td_tverdict_publish_archive_rt.py",
     "tests/test_p2_multi_agent_supervisor_gate_runtime.py",
     "tests/test_p2_artifact_bus_gate_runtime.py",
     "tests/test_p2_ide_integration_gate_runtime.py",
@@ -136,3 +154,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
